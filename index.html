@@ -6,8 +6,8 @@
   <title>CipherCore | Zero-Server End-to-End Encrypted (E2EE) Private Chat</title>
   
   <!-- SEO, AEO, & GEO Meta Tags -->
-  <meta name="description" content="CipherCore is a military-grade, zero-server, end-to-end encrypted (E2EE) peer-to-peer web chat with unique user URLs, AES-256-GCM encryption, ephemeral messages, and local encrypted persistence.">
-  <meta name="keywords" content="end to end encryption, zero server chat, private chat, E2EE, unique url chat, WebCrypto API, AES-GCM, ECDH, secure messaging, github pages chat">
+  <meta name="description" content="CipherCore is a military-grade, zero-server, end-to-end encrypted (E2EE) peer-to-peer web chat with unique user URLs, AES-256-GCM encryption, voice notes, image previews, and local encrypted persistence.">
+  <meta name="keywords" content="end to end encryption, zero server chat, private chat, E2EE, unique url chat, voice chat, image preview, WebCrypto API, AES-GCM, ECDH, secure messaging, github pages chat">
   <meta name="author" content="CipherCore Security Group">
   <meta name="robots" content="index, follow">
   <meta name="geo.region" content="US">
@@ -16,11 +16,11 @@
   <!-- Open Graph / Social Cards -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="CipherCore | Zero-Server End-to-End Encrypted Chat">
-  <meta property="og:description" content="Serverless, peer-to-peer cryptographic chat with unique user access URLs, encrypted local history, and 60-digit safety numbers.">
+  <meta property="og:description" content="Serverless, peer-to-peer cryptographic chat with unique user access URLs, encrypted local history, voice notes, image previews, and 60-digit safety numbers.">
   <meta property="og:image" content="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80">
   <meta property="twitter:card" content="summary_large_image">
   <meta property="twitter:title" content="CipherCore | Military Grade E2EE Chat">
-  <meta property="twitter:description" content="High security zero-server encrypted chat with unique user access URLs.">
+  <meta property="twitter:description" content="High security zero-server encrypted chat with unique user access URLs and multimedia previews.">
 
   <!-- Favicon & PWA Manifest -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
@@ -41,12 +41,12 @@
     .identity-banner {
       background: var(--bg-surface-glass);
       border-bottom: 1px solid var(--border-subtle);
-      padding: 0.85rem 1.5rem;
+      padding: 0.75rem 1.25rem;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 1rem;
+      gap: 0.75rem;
     }
     .url-chip-group {
       display: flex;
@@ -93,11 +93,17 @@
     .user-pill-badge {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
+      gap: 0.5rem;
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border-subtle);
-      padding: 0.4rem 0.85rem;
+      padding: 0.35rem 0.75rem;
       border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .user-pill-badge:hover {
+      border-color: var(--accent-primary);
+      background: var(--bg-surface-hover);
     }
     .user-pill-avatar {
       width: 28px;
@@ -110,6 +116,11 @@
       justify-content: center;
       font-weight: 800;
       font-size: 0.8rem;
+    }
+    .peer-connect-box {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface-elevated);
     }
   </style>
 </head>
@@ -129,11 +140,14 @@
     </a>
 
     <div class="header-actions">
-      <!-- Active User Profile Pill -->
-      <div class="user-pill-badge">
+      <!-- Active User Profile Pill (Click to edit username) -->
+      <div class="user-pill-badge" title="Click to edit your username">
         <div class="user-pill-avatar" id="user-avatar-badge">A</div>
         <div style="font-size: 0.8rem;">
-          <strong id="user-badge-name" style="color: var(--text-main);">Agent</strong>
+          <div style="display:flex; align-items:center; gap:0.25rem;">
+            <strong id="user-badge-name" style="color: var(--text-main);">Agent</strong>
+            <i class='bx bx-edit-alt' style="color:var(--accent-primary); font-size:0.75rem;"></i>
+          </div>
           <span id="user-badge-id" style="display:block; font-family:var(--font-mono); font-size:0.68rem; color:var(--text-subtle);">usr_...</span>
         </div>
       </div>
@@ -250,7 +264,6 @@
               </div>
             </div>
 
-            <!-- Auto-Generated 16-Character High-Security Password -->
             <div class="form-group">
               <label class="form-label" for="setup-password">
                 <span>16-Character Cryptographic Key</span>
@@ -315,7 +328,7 @@
     <section id="view-chat" class="view active">
       <div class="chat-layout">
 
-        <!-- Sidebar: Peer Mesh & Ephemeral Settings -->
+        <!-- Sidebar: Peer Mesh, Peer Search & Ephemeral Settings -->
         <aside class="chat-sidebar" id="chat-sidebar">
           <div class="sidebar-header">
             <div class="room-meta">
@@ -328,6 +341,19 @@
             <button class="btn btn-icon" id="btn-share-invite" title="Copy Public Chat Link">
               <i class='bx bx-link-external'></i>
             </button>
+          </div>
+
+          <!-- Peer Connect Box (Search/Connect by Username or ID) -->
+          <div class="peer-connect-box">
+            <label style="font-size:0.7rem; color:var(--text-subtle); text-transform:uppercase; font-weight:700; display:block; margin-bottom:0.35rem;">
+              <i class='bx bx-user-plus'></i> Connect to Peer (Username or ID)
+            </label>
+            <div style="display:flex; gap:0.4rem;">
+              <input type="text" id="input-peer-connect" class="form-input" style="padding:0.4rem 0.6rem; font-size:0.8rem;" placeholder="e.g. usr_xxxx or Agent">
+              <button class="btn btn-primary" id="btn-connect-peer" style="padding:0.4rem 0.75rem; font-size:0.8rem;">
+                <i class='bx bx-link'></i>
+              </button>
+            </div>
           </div>
 
           <div class="sidebar-section-title">
@@ -381,7 +407,7 @@
               <i class='bx bxs-lock-alt'></i>
               <strong>End-to-End Encrypted Tunnel Active</strong>
               <p style="margin-top:0.35rem; font-size:0.8rem; color:var(--text-subtle);">
-                Only devices in this channel hold the cryptographic keys. Persistent messages are stored encrypted in your local browser vault.
+                Only devices in this channel hold the cryptographic keys. Persistent messages, voice notes, and images are stored encrypted in your local browser vault.
               </p>
             </div>
           </div>
@@ -390,9 +416,23 @@
           <div class="chat-input-area">
             <div class="typing-indicator-bar" id="typing-indicator"></div>
 
+            <!-- Quick Emoji Bar -->
+            <div class="quick-emoji-bar">
+              <span style="font-size:0.7rem; color:var(--text-subtle); margin-right:0.2rem;">Quick:</span>
+              <button type="button" class="emoji-btn">😀</button>
+              <button type="button" class="emoji-btn">👍</button>
+              <button type="button" class="emoji-btn">🔒</button>
+              <button type="button" class="emoji-btn">🛡️</button>
+              <button type="button" class="emoji-btn">🔥</button>
+              <button type="button" class="emoji-btn">⚡</button>
+              <button type="button" class="emoji-btn">👋</button>
+              <button type="button" class="emoji-btn">❤️</button>
+              <button type="button" class="emoji-btn">🚀</button>
+            </div>
+
             <div class="input-controls-row">
               <input type="file" id="file-input" style="display: none;">
-              <button class="btn btn-icon" id="btn-attach-file" title="Send Encrypted File or Media">
+              <button class="btn btn-icon" id="btn-attach-file" title="Send Encrypted Image, File, or Media">
                 <i class='bx bx-paperclip'></i>
               </button>
 
@@ -406,10 +446,10 @@
                   <span id="recording-duration">00:00</span>
                 </div>
                 <div style="display:flex; gap:0.5rem;">
-                  <button class="btn btn-icon" id="btn-cancel-recording" style="background:transparent; color:#ff4757;">
+                  <button class="btn btn-icon" id="btn-cancel-recording" style="background:transparent; color:#ff4757;" title="Cancel recording">
                     <i class='bx bx-x'></i>
                   </button>
-                  <button class="btn btn-icon" id="btn-send-recording" style="background:var(--color-danger); color:#fff;">
+                  <button class="btn btn-icon" id="btn-send-recording" style="background:var(--color-danger); color:#fff;" title="Send voice note">
                     <i class='bx bx-check'></i>
                   </button>
                 </div>
@@ -428,6 +468,16 @@
     </section>
 
   </main>
+
+  <!-- ====================================================================
+       MODAL: IMAGE LIGHTBOX
+       ==================================================================== -->
+  <div class="image-lightbox-backdrop" id="image-lightbox">
+    <button class="lightbox-close-btn" id="btn-close-lightbox" title="Close image preview">
+      <i class='bx bx-x'></i>
+    </button>
+    <img src="" alt="Enlarged E2EE Image" id="lightbox-img" class="lightbox-img">
+  </div>
 
   <!-- ====================================================================
        MODAL: SAFETY NUMBERS & SAS VERIFICATION
