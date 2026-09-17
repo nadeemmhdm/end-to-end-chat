@@ -1,3 +1,7 @@
+<div align="center">
+
+![CipherCore - Private. Peer-to-Peer. Encrypted.](assets/ciphercore-banner.png)
+
 # 🛡️ CipherCore | Zero-Server End-to-End Encrypted (E2EE) Chat
 
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes-brightgreen?style=flat-square)](https://github.com/nadeemmhdm/end-to-end-chat)
@@ -7,7 +11,10 @@
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red.svg?style=flat-square)](SECURITY.md)
 [![Zero-Server](https://img.shields.io/badge/Architecture-100%25%20Zero--Server-informational?style=flat-square)](#-architecture)
 
-> **A 100% client-side, zero-server, peer-to-peer end-to-end encrypted (E2EE) web chat application built with vanilla JavaScript, Web Crypto API, WebRTC DataChannels, and modern cyber-glassmorphism styling.**
+**Private. Peer-to-Peer. Encrypted.**  
+*100% Client-Side • WebRTC DataChannels • Web Crypto API • Open Source*
+
+</div>
 
 ---
 
@@ -202,6 +209,8 @@ Since **CipherCore** is completely serverless and consists purely of static clie
 ├── LICENSE          # MIT Open Source License
 ├── SECURITY.md      # Security policy and responsible disclosure instructions
 ├── README.md        # Documentation and deployment guides
+├── assets/
+│   └── ciphercore-banner.png # Project hero banner
 ├── css/
 │   └── style.css    # Responsive glassmorphic dark mode styling & animations
 └── js/
