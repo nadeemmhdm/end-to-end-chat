@@ -512,6 +512,124 @@
   </div>
 
   <!-- ====================================================================
+       MODAL: DEVICE ACCOUNT & SECURITY VAULT (Easy-Access Model)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-device-vault">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <i class='bx bxs-devices' style="color:var(--accent-primary);"></i> Device Account & Security Vault
+        </h3>
+        <button class="btn btn-icon btn-close-modal">
+          <i class='bx bx-x'></i>
+        </button>
+      </div>
+
+      <!-- Device Status Pill -->
+      <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-base); padding:0.75rem 1rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-bottom:1.25rem;">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <span style="width:10px; height:10px; border-radius:50%; background:var(--color-success); box-shadow:0 0 8px var(--color-success);"></span>
+          <span style="font-size:0.85rem; font-weight:700; color:var(--text-main);">One Device • Bound & Active</span>
+        </div>
+        <span style="font-size:0.72rem; color:var(--text-subtle); text-transform:uppercase; font-weight:700;">In-RAM Encryption</span>
+      </div>
+
+      <!-- Username Editor -->
+      <div class="form-group">
+        <label class="form-label" for="vault-username">
+          <span>Codename / Username</span>
+          <span style="font-size:0.75rem; color:var(--text-subtle);">Display identity</span>
+        </label>
+        <div class="form-input-wrapper">
+          <i class='bx bx-user form-input-icon'></i>
+          <input type="text" id="vault-username" class="form-input" maxlength="24">
+          <button type="button" class="form-action-btn" id="btn-save-vault-username" title="Save username">
+            <i class='bx bx-check'></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Device ID -->
+      <div class="form-group">
+        <label class="form-label" for="vault-device-id">
+          <span>Permanent Device ID</span>
+          <span style="font-size:0.75rem; color:var(--text-subtle);">WebRTC Peer Target</span>
+        </label>
+        <div class="form-input-wrapper">
+          <i class='bx bx-fingerprint form-input-icon'></i>
+          <input type="text" id="vault-device-id" class="form-input mono" readonly>
+          <button type="button" class="form-action-btn" id="btn-copy-vault-id" title="Copy Device ID">
+            <i class='bx bx-copy'></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Device Master Key (Masked with Eye Toggle) -->
+      <div class="form-group">
+        <label class="form-label" for="vault-secret-key">
+          <span>16-Character Master Cryptographic Key</span>
+          <span style="font-size:0.75rem; color:var(--accent-primary);">PBKDF2 600k Key</span>
+        </label>
+        <div class="form-input-wrapper">
+          <i class='bx bx-key form-input-icon'></i>
+          <input type="password" id="vault-secret-key" class="form-input mono" readonly>
+          <button type="button" class="form-action-btn" id="btn-toggle-key-visibility" style="right: 2.5rem;" title="Show/Hide Key">
+            <i class='bx bx-show' id="icon-toggle-key"></i>
+          </button>
+          <button type="button" class="form-action-btn" id="btn-copy-vault-key" title="Copy Master Key">
+            <i class='bx bx-copy'></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Optional PIN Lock for this Device -->
+      <div class="form-group" style="background:var(--bg-base); padding:1rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+          <span style="font-size:0.85rem; font-weight:700; display:flex; align-items:center; gap:0.4rem;">
+            <i class='bx bx-shield-quarter' style="color:var(--accent-primary);"></i> Device PIN Lock (Optional)
+          </span>
+          <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.75rem; color:var(--text-muted);">
+            <input type="checkbox" id="toggle-pin-lock" style="cursor:pointer;"> Enable
+          </label>
+        </div>
+        <div id="pin-lock-inputs" style="display:none; gap:0.5rem; margin-top:0.5rem;">
+          <input type="password" id="input-device-pin" class="form-input mono" placeholder="Set 4-digit PIN" maxlength="6" style="padding:0.4rem 0.75rem; font-size:0.85rem;">
+          <button type="button" class="btn btn-primary" id="btn-save-pin" style="padding:0.4rem 0.85rem; font-size:0.8rem;">Save PIN</button>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; gap:0.6rem; margin-top:1.25rem;">
+        <button class="btn btn-secondary" id="btn-export-backup" style="flex:1; font-size:0.82rem;">
+          <i class='bx bx-export'></i> Export Backup
+        </button>
+        <button class="btn btn-primary btn-close-modal" style="flex:1; font-size:0.82rem;">
+          <i class='bx bx-check'></i> Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       DEVICE PIN UNLOCK OVERLAY (Active if PIN lock is enabled)
+       ==================================================================== -->
+  <div class="modal-backdrop" id="device-pin-overlay">
+    <div class="modal-card" style="max-width: 360px; text-align: center;">
+      <div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 230, 153, 0.15); border: 1px solid var(--accent-primary); color: var(--accent-primary); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 1rem;">
+        <i class='bx bxs-lock-alt'></i>
+      </div>
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem;">Device Locked</h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Enter your 4-digit security PIN to access this device's encrypted chats.</p>
+      
+      <input type="password" id="unlock-pin-input" class="form-input mono" placeholder="••••" maxlength="6" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.3em; padding: 0.5rem; margin-bottom: 1rem;">
+      
+      <button type="button" class="btn btn-primary" id="btn-unlock-pin" style="width: 100%;">
+        <i class='bx bx-lock-open-alt'></i> Unlock Device
+      </button>
+    </div>
+  </div>
+
+  <!-- ====================================================================
        DECOY MODE / STEALTH CALCULATOR
        ==================================================================== -->
   <div class="decoy-screen" id="decoy-screen">
