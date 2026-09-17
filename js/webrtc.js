@@ -40,6 +40,20 @@ class WebRTCManager {
     };
 
     this.pendingFileTransfers = new Map(); // transferId -> { name, size, type, chunks, receivedBytes, totalChunks }
+    this.tabInstanceId = 'tab_' + Math.random().toString(36).substring(2, 9);
+
+    // Local Multi-Tab Mesh Relay (instant zero-server communication between tabs on same browser/origin)
+    this.broadcastChannel = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        this.broadcastChannel = new BroadcastChannel('ciphercore_p2p_mesh');
+        this.broadcastChannel.onmessage = (event) => {
+          this._handleBroadcastChannelMessage(event.data);
+        };
+      }
+    } catch (e) {
+      console.warn('BroadcastChannel initialization warning:', e);
+    }
   }
 
   on(event, callback) {
@@ -57,7 +71,7 @@ class WebRTCManager {
   }
 
   /**
-   * Initializes PeerJS peer instance with a hashed room/identity ID
+   * Initializes PeerJS peer instance with automatic ID collision retry
    * @param {string} customId - Preferred peer ID
    * @returns {Promise<string>} assigned peer ID
    */
@@ -75,31 +89,44 @@ class WebRTCManager {
           }
         };
 
-        this.peer = customId ? new Peer(customId, peerConfig) : new Peer(peerConfig);
+        const setupPeer = (idToTry) => {
+          this.peer = idToTry ? new Peer(idToTry, peerConfig) : new Peer(peerConfig);
 
-        this.peer.on('open', (id) => {
-          this.myPeerId = id;
-          this.emit('statusChange', { status: 'ready', peerId: id });
-          resolve(id);
-        });
+          this.peer.on('open', (id) => {
+            this.myPeerId = id;
+            this.emit('statusChange', { status: 'ready', peerId: id });
+            this._announceToLocalMesh();
+            resolve(id);
+          });
 
-        this.peer.on('connection', (conn) => {
-          this._handleIncomingConnection(conn);
-        });
+          this.peer.on('connection', (conn) => {
+            this._handleIncomingConnection(conn);
+          });
 
-        this.peer.on('error', (err) => {
-          console.warn('WebRTC / Peer error:', err);
-          this.emit('error', err);
-          if (!this.myPeerId) reject(err);
-        });
+          this.peer.on('error', (err) => {
+            console.warn('WebRTC / Peer error:', err);
+            // Handle ID collision gracefully (e.g. multi-tab testing on the same machine)
+            if (err.type === 'unavailable-id' && idToTry) {
+              const fallbackId = `${idToTry}_${Math.random().toString(36).substring(2, 6)}`;
+              console.log(`Peer ID "${idToTry}" is active elsewhere. Reconnecting as instance: ${fallbackId}`);
+              try { this.peer.destroy(); } catch (e) {}
+              setupPeer(fallbackId);
+              return;
+            }
+            this.emit('error', err);
+            if (!this.myPeerId) reject(err);
+          });
 
-        this.peer.on('disconnected', () => {
-          this.emit('statusChange', { status: 'disconnected' });
-        });
+          this.peer.on('disconnected', () => {
+            this.emit('statusChange', { status: 'disconnected' });
+          });
 
-        this.peer.on('close', () => {
-          this.emit('statusChange', { status: 'closed' });
-        });
+          this.peer.on('close', () => {
+            this.emit('statusChange', { status: 'closed' });
+          });
+        };
+
+        setupPeer(customId);
 
       } catch (err) {
         reject(err);
@@ -121,6 +148,17 @@ class WebRTCManager {
       return this.connections.get(targetPeerId);
     }
 
+    // Ping local mesh immediately
+    if (this.broadcastChannel) {
+      this.broadcastChannel.postMessage({
+        type: 'mesh-discovery-ping',
+        senderPeerId: this.myPeerId,
+        targetPeerId: targetPeerId,
+        tabId: this.tabInstanceId,
+        metadata: metadata
+      });
+    }
+
     const conn = this.peer.connect(targetPeerId, {
       reliable: true,
       metadata: metadata
@@ -135,7 +173,7 @@ class WebRTCManager {
   }
 
   _setupConnectionHandlers(conn) {
-    conn.on('open', () => {
+    const handleOpen = () => {
       this.connections.set(conn.peer, conn);
       this.emit('peerConnect', {
         peerId: conn.peer,
@@ -146,7 +184,13 @@ class WebRTCManager {
       if (this.onHandshakeReady) {
         this.onHandshakeReady(conn.peer);
       }
-    });
+    };
+
+    if (conn.open) {
+      handleOpen();
+    } else {
+      conn.on('open', handleOpen);
+    }
 
     conn.on('data', (data) => {
       this._processIncomingData(conn.peer, data);
@@ -164,6 +208,78 @@ class WebRTCManager {
     });
   }
 
+  _announceToLocalMesh() {
+    if (!this.broadcastChannel || !this.myPeerId) return;
+    this.broadcastChannel.postMessage({
+      type: 'mesh-discovery-ping',
+      senderPeerId: this.myPeerId,
+      tabId: this.tabInstanceId
+    });
+  }
+
+  _handleBroadcastChannelMessage(packet) {
+    if (!packet || typeof packet !== 'object') return;
+    if (packet.tabId === this.tabInstanceId) return; // ignore self
+
+    if (packet.type === 'mesh-discovery-ping') {
+      if (this.broadcastChannel && this.myPeerId) {
+        // Send Pong response back
+        this.broadcastChannel.postMessage({
+          type: 'mesh-discovery-pong',
+          senderPeerId: this.myPeerId,
+          targetPeerId: packet.senderPeerId,
+          tabId: this.tabInstanceId
+        });
+
+        // Trigger local peer connection event
+        this.emit('peerConnect', {
+          peerId: packet.senderPeerId,
+          isLocalMesh: true
+        });
+
+        if (this.onHandshakeReady) {
+          this.onHandshakeReady(packet.senderPeerId);
+        }
+      }
+      return;
+    }
+
+    if (packet.type === 'mesh-discovery-pong') {
+      if (packet.targetPeerId === this.myPeerId || !packet.targetPeerId) {
+        this.emit('peerConnect', {
+          peerId: packet.senderPeerId,
+          isLocalMesh: true
+        });
+
+        if (this.onHandshakeReady) {
+          this.onHandshakeReady(packet.senderPeerId);
+        }
+      }
+      return;
+    }
+
+    if (packet.type === 'mesh-direct-data') {
+      if (packet.targetPeerId === this.myPeerId || !packet.targetPeerId) {
+        this._processIncomingData(packet.senderPeerId, packet.payload);
+      }
+      return;
+    }
+  }
+
+  sendToMesh(targetPeerId, payload) {
+    if (this.broadcastChannel && this.myPeerId) {
+      this.broadcastChannel.postMessage({
+        type: 'mesh-direct-data',
+        senderPeerId: this.myPeerId,
+        targetPeerId: targetPeerId,
+        tabId: this.tabInstanceId,
+        payload: payload
+      });
+      return true;
+    }
+    return false;
+  }
+
   _processIncomingData(peerId, data) {
     if (!data || typeof data !== 'object') return;
 
@@ -178,16 +294,29 @@ class WebRTCManager {
   }
 
   /**
-   * Send data payload to all connected peers
+   * Send data payload to all connected peers (WebRTC + Mesh)
    */
   broadcast(data) {
     let sentCount = 0;
     this.connections.forEach((conn) => {
       if (conn.open) {
-        conn.send(data);
-        sentCount++;
+        try {
+          conn.send(data);
+          sentCount++;
+        } catch (e) {}
       }
     });
+
+    if (this.broadcastChannel && this.myPeerId) {
+      this.broadcastChannel.postMessage({
+        type: 'mesh-direct-data',
+        senderPeerId: this.myPeerId,
+        targetPeerId: null,
+        tabId: this.tabInstanceId,
+        payload: data
+      });
+      sentCount++;
+    }
     return sentCount;
   }
 
@@ -195,12 +324,24 @@ class WebRTCManager {
    * Send data payload to a specific peer
    */
   sendTo(peerId, data) {
+    let sent = false;
     const conn = this.connections.get(peerId);
     if (conn && conn.open) {
-      conn.send(data);
-      return true;
+      try {
+        conn.send(data);
+        sent = true;
+      } catch (e) {
+        console.warn('WebRTC conn.send failed:', e);
+      }
     }
-    return false;
+
+    // Also send via local BroadcastChannel mesh
+    if (this.broadcastChannel) {
+      this.sendToMesh(peerId, data);
+      sent = true;
+    }
+
+    return sent;
   }
 
   /**
@@ -297,7 +438,9 @@ class WebRTCManager {
   }
 
   getConnectedPeerCount() {
-    return Array.from(this.connections.values()).filter(c => c.open).length;
+    const webrtcCount = Array.from(this.connections.values()).filter(c => c.open).length;
+    const profileCount = this.peerProfiles.size;
+    return Math.max(webrtcCount, profileCount);
   }
 }
 

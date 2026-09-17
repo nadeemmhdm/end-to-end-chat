@@ -148,6 +148,12 @@ class CipherApp {
     this.devicePinOverlay = document.getElementById('device-pin-overlay');
     this.unlockPinInput = document.getElementById('unlock-pin-input');
     this.btnUnlockPin = document.getElementById('btn-unlock-pin');
+    this.btnSystemLock = document.getElementById('btn-system-lock');
+    this.btnTestSecondTab = document.getElementById('btn-test-second-tab');
+    this.btnCopyChatQuick = document.getElementById('btn-copy-chat-quick');
+    this.peerConnectStatus = document.getElementById('peer-connect-status');
+    this.pendingMessageQueue = new Map();
+    this.enteredPin = '';
 
     // Lightbox Modal
     this.imageLightbox = document.getElementById('image-lightbox');
@@ -257,12 +263,68 @@ class CipherApp {
     if (this.displayRoomId) this.displayRoomId.textContent = userId;
   }
 
+  // Save and persist username permanently across device, URL hash, and network
+  saveUsername(newName) {
+    newName = (newName || '').trim();
+    if (!newName) {
+      this.showToast('⚠️ Please enter a valid username.');
+      return false;
+    }
+    if (newName.length > 24) newName = newName.substring(0, 24);
+
+    this.currentUser.username = newName;
+    this.updateUserBadgeUI();
+    this.updateUniqueUrls();
+
+    // Update device local storage
+    const raw = localStorage.getItem(this.STORAGE_DEVICE_ACCOUNT);
+    let account = {};
+    if (raw) {
+      try { account = JSON.parse(raw); } catch (e) {}
+    }
+    account.userId = this.currentUser.userId;
+    account.secretKey = this.currentUser.secretKey;
+    account.username = newName;
+    account.updatedAt = Date.now();
+    localStorage.setItem(this.STORAGE_DEVICE_ACCOUNT, JSON.stringify(account));
+
+    // Update browser address bar hash seamlessly without reload
+    const baseUrl = window.location.origin + window.location.pathname;
+    const newHash = `#account=${this.currentUser.userId}&key=${encodeURIComponent(this.currentUser.secretKey)}&user=${encodeURIComponent(newName)}`;
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', newHash);
+    }
+
+    // Modal field sync & visual feedback
+    if (this.vaultUsername) this.vaultUsername.value = newName;
+    const feedback = document.getElementById('vault-username-feedback');
+    if (feedback) {
+      feedback.style.display = 'block';
+      setTimeout(() => { feedback.style.display = 'none'; }, 3000);
+    }
+
+    this.showToast(`✅ Codename saved as: ${newName}`);
+
+    // Broadcast username update to all active peers
+    if (this.webrtc) {
+      this.webrtc.broadcast({
+        type: 'username-update',
+        sender: this.currentUser.userId,
+        username: newName
+      });
+    }
+
+    return true;
+  }
+
   // Check if user enabled a device PIN
   checkPinLockAndUnlock(chatTargetId) {
     const savedPin = localStorage.getItem(this.STORAGE_DEVICE_PIN);
     if (savedPin && this.devicePinOverlay) {
       this.devicePinOverlay.classList.add('active');
-      this.unlockPinInput.focus();
+      this.enteredPin = '';
+      this.updatePinDotsUI();
+      if (this.unlockPinInput) this.unlockPinInput.focus();
     } else {
       if (chatTargetId) {
         this.handleDirectChatWithPeer(chatTargetId);
@@ -303,6 +365,13 @@ class CipherApp {
     const publicChatUrl = `${baseUrl}#chat=${this.currentUser.userId}`;
     if (this.publicChatUrlInput) {
       this.publicChatUrlInput.value = publicChatUrl;
+    }
+
+    // Synchronize browser address bar hash if not currently connecting to #chat=
+    if (window.history && window.history.replaceState) {
+      if (!window.location.hash.startsWith('#chat=')) {
+        window.history.replaceState(null, '', privateAccessUrl);
+      }
     }
   }
 
@@ -422,25 +491,38 @@ class CipherApp {
     }
 
     // Save Vault Username
-    if (this.btnSaveVaultUsername && this.vaultUsername) {
-      this.btnSaveVaultUsername.addEventListener('click', () => {
-        const newName = this.vaultUsername.value.trim();
-        if (newName) {
-          this.currentUser.username = newName;
-          this.updateUserBadgeUI();
-          this.updateUniqueUrls();
-          localStorage.setItem(this.STORAGE_DEVICE_ACCOUNT, JSON.stringify({
-            userId: this.currentUser.userId,
-            secretKey: this.currentUser.secretKey,
-            username: this.currentUser.username,
-            updatedAt: Date.now()
-          }));
-          this.showToast('✅ Username updated on this device!');
-          this.webrtc.broadcast({
-            type: 'username-update',
-            username: this.currentUser.username
-          });
+    const onSaveUsernameClick = () => {
+      const newName = this.vaultUsername ? this.vaultUsername.value.trim() : '';
+      if (newName) {
+        this.saveUsername(newName);
+      }
+    };
+
+    if (this.btnSaveVaultUsername) {
+      this.btnSaveVaultUsername.addEventListener('click', onSaveUsernameClick);
+    }
+    if (this.vaultUsername) {
+      this.vaultUsername.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onSaveUsernameClick();
         }
+      });
+    }
+
+    // Auto-save username when closing vault modal if modified
+    document.querySelectorAll('#modal-device-vault .btn-close-modal').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.vaultUsername && this.vaultUsername.value.trim() && this.vaultUsername.value.trim() !== this.currentUser.username) {
+          this.saveUsername(this.vaultUsername.value.trim());
+        }
+      });
+    });
+
+    // System Lock Button in Header
+    if (this.btnSystemLock) {
+      this.btnSystemLock.addEventListener('click', () => {
+        this.lockSystem();
       });
     }
 
@@ -488,7 +570,7 @@ class CipherApp {
       });
     }
 
-    // Save PIN
+    // Save PIN from Vault modal
     if (this.btnSavePin && this.inputDevicePin) {
       this.btnSavePin.addEventListener('click', () => {
         const pin = this.inputDevicePin.value.trim();
@@ -496,33 +578,15 @@ class CipherApp {
           localStorage.setItem(this.STORAGE_DEVICE_PIN, pin);
           this.showToast('🔒 4-digit Device PIN saved successfully!');
           this.inputDevicePin.value = '';
+          if (this.togglePinLock) this.togglePinLock.checked = true;
         } else {
           alert('PIN must be at least 4 digits.');
         }
       });
     }
 
-    // Unlock PIN button
-    if (this.btnUnlockPin && this.unlockPinInput) {
-      const handleUnlock = () => {
-        const saved = localStorage.getItem(this.STORAGE_DEVICE_PIN);
-        const entered = this.unlockPinInput.value.trim();
-        if (entered === saved) {
-          this.devicePinOverlay.classList.remove('active');
-          this.unlockPinInput.value = '';
-          this.showToast('🔓 Device unlocked!');
-        } else {
-          alert('Incorrect PIN. Please try again.');
-          this.unlockPinInput.value = '';
-          this.unlockPinInput.focus();
-        }
-      };
-
-      this.btnUnlockPin.addEventListener('click', handleUnlock);
-      this.unlockPinInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleUnlock();
-      });
-    }
+    // Initialize Interactive Numpad & Visual Dots on PIN Overlay
+    this.initPinLockKeypad();
 
     // Export Backup JSON
     if (this.btnExportBackup) {
@@ -555,6 +619,27 @@ class CipherApp {
       this.inputPeerConnect.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           this.btnConnectPeer.click();
+        }
+      });
+    }
+
+    // Quick Test 2nd Tab Button (multi-tab encrypted communication)
+    if (this.btnTestSecondTab) {
+      this.btnTestSecondTab.addEventListener('click', () => {
+        const baseUrl = window.location.origin + window.location.pathname;
+        const testUrl = `${baseUrl}#chat=${this.currentUser.userId}`;
+        window.open(testUrl, '_blank');
+        this.showToast('🚀 Opened 2nd tab to test live encrypted messaging!');
+      });
+    }
+
+    // Quick Share Link Button
+    if (this.btnCopyChatQuick) {
+      this.btnCopyChatQuick.addEventListener('click', () => {
+        if (this.publicChatUrlInput) {
+          navigator.clipboard.writeText(this.publicChatUrlInput.value).then(() => {
+            this.showToast('💬 Public Chat Link copied! Share with friends.');
+          });
         }
       });
     }
@@ -709,9 +794,177 @@ class CipherApp {
     });
   }
 
+  // System Security Lock
+  lockSystem() {
+    let savedPin = localStorage.getItem(this.STORAGE_DEVICE_PIN);
+    if (!savedPin) {
+      const pin = prompt('Set a 4-digit security PIN to lock your session:');
+      if (pin && pin.trim().length >= 4) {
+        savedPin = pin.trim();
+        localStorage.setItem(this.STORAGE_DEVICE_PIN, savedPin);
+        if (this.togglePinLock) this.togglePinLock.checked = true;
+        this.showToast('🔒 4-digit PIN configured and saved.');
+      } else {
+        this.showToast('PIN lock cancelled (must be at least 4 digits).');
+        return;
+      }
+    }
+    this.enteredPin = '';
+    this.updatePinDotsUI();
+    if (this.unlockPinInput) this.unlockPinInput.value = '';
+    if (this.devicePinOverlay) {
+      this.devicePinOverlay.classList.add('active');
+      if (this.unlockPinInput) this.unlockPinInput.focus();
+    }
+    this.playSound('burn');
+  }
+
+  // Interactive PIN Numpad & Visual Dots Controller
+  initPinLockKeypad() {
+    this.enteredPin = '';
+    const dotsContainer = document.getElementById('pin-dots-row');
+    const numpad = document.getElementById('pin-numpad');
+
+    const verifyPin = () => {
+      const saved = localStorage.getItem(this.STORAGE_DEVICE_PIN);
+      if (this.enteredPin === saved) {
+        if (this.devicePinOverlay) this.devicePinOverlay.classList.remove('active');
+        this.enteredPin = '';
+        this.updatePinDotsUI();
+        this.showToast('🔓 Session unlocked successfully!');
+        this.playSound('send');
+      } else {
+        this.playSound('alert');
+        const dots = dotsContainer ? dotsContainer.querySelectorAll('.pin-dot') : [];
+        dots.forEach(d => d.classList.add('error'));
+        if (dotsContainer) dotsContainer.classList.add('shake');
+        setTimeout(() => {
+          this.enteredPin = '';
+          this.updatePinDotsUI();
+          if (dotsContainer) dotsContainer.classList.remove('shake');
+        }, 500);
+      }
+    };
+
+    const handleDigit = (digit) => {
+      if (this.enteredPin.length < 4) {
+        this.enteredPin += digit;
+        this.updatePinDotsUI();
+        if (this.enteredPin.length === 4) {
+          setTimeout(verifyPin, 120);
+        }
+      }
+    };
+
+    const handleBackspace = () => {
+      if (this.enteredPin.length > 0) {
+        this.enteredPin = this.enteredPin.slice(0, -1);
+        this.updatePinDotsUI();
+      }
+    };
+
+    const handleClear = () => {
+      this.enteredPin = '';
+      this.updatePinDotsUI();
+    };
+
+    if (numpad) {
+      numpad.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const key = btn.dataset.key;
+        if (key === 'backspace') handleBackspace();
+        else if (key === 'clear') handleClear();
+        else if (key !== undefined) handleDigit(key);
+      });
+    }
+
+    if (this.unlockPinInput) {
+      this.unlockPinInput.addEventListener('input', (e) => {
+        this.enteredPin = e.target.value.replace(/\D/g, '').slice(0, 4);
+        this.updatePinDotsUI();
+        if (this.enteredPin.length === 4) {
+          setTimeout(verifyPin, 120);
+        }
+      });
+      this.unlockPinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') verifyPin();
+      });
+    }
+
+    if (this.btnUnlockPin) {
+      this.btnUnlockPin.addEventListener('click', verifyPin);
+    }
+
+    const btnForgotPin = document.getElementById('btn-forgot-pin');
+    if (btnForgotPin) {
+      btnForgotPin.addEventListener('click', () => {
+        if (confirm('Wiping session will purge local chat history and reset PIN. Are you sure?')) {
+          localStorage.removeItem(this.STORAGE_DEVICE_PIN);
+          this.wipeLocalData();
+        }
+      });
+    }
+  }
+
+  updatePinDotsUI() {
+    const dotsContainer = document.getElementById('pin-dots-row');
+    const dots = dotsContainer ? dotsContainer.querySelectorAll('.pin-dot') : [];
+    dots.forEach((dot, idx) => {
+      if (idx < this.enteredPin.length) {
+        dot.classList.add('filled');
+        dot.classList.remove('error');
+      } else {
+        dot.classList.remove('filled', 'error');
+      }
+    });
+    if (this.unlockPinInput) {
+      this.unlockPinInput.value = this.enteredPin;
+    }
+  }
+
+  // Pending Message Queue
+  queueMessage(peerId, payload) {
+    if (!this.pendingMessageQueue) this.pendingMessageQueue = new Map();
+    if (!this.pendingMessageQueue.has(peerId)) {
+      this.pendingMessageQueue.set(peerId, []);
+    }
+    this.pendingMessageQueue.get(peerId).push(payload);
+  }
+
+  async flushPendingMessages(peerId) {
+    if (!this.pendingMessageQueue || !this.pendingMessageQueue.has(peerId)) return;
+    const queue = this.pendingMessageQueue.get(peerId);
+    if (!queue || queue.length === 0) return;
+
+    const key = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
+    let count = 0;
+    while (queue.length > 0) {
+      const payload = queue.shift();
+      try {
+        const { ciphertext, iv } = await this.crypto.encrypt(JSON.stringify(payload), key);
+        this.webrtc.sendTo(peerId, {
+          type: 'encrypted-message',
+          sender: this.currentUser.userId,
+          ciphertext: ciphertext,
+          iv: iv
+        });
+        count++;
+      } catch (err) {
+        console.error('Error flushing message:', err);
+      }
+    }
+    this.pendingMessageQueue.delete(peerId);
+    if (count > 0) {
+      this.showToast(`📨 Sent ${count} queued message(s) to peer!`);
+    }
+  }
+
   async sendHandshake(targetPeerId) {
     const handshakePayload = {
       type: 'handshake',
+      isAck: false,
+      sender: this.currentUser.userId,
       username: this.currentUser.username,
       publicKey: this.currentUser.publicKeyBase64,
       timestamp: Date.now(),
@@ -723,29 +976,47 @@ class CipherApp {
     if (!packet || !packet.type) return;
 
     if (packet.type === 'handshake') {
-      const remotePublicKey = await this.crypto.importPublicKey(packet.publicKey);
-      
-      const sharedKey = await this.crypto.deriveSharedSecret(
-        this.currentUser.keyPair.privateKey,
-        remotePublicKey
-      );
-      this.currentRoom.sharedSessionKeys.set(peerId, sharedKey);
+      try {
+        const remotePublicKey = await this.crypto.importPublicKey(packet.publicKey);
+        
+        const sharedKey = await this.crypto.deriveSharedSecret(
+          this.currentUser.keyPair.privateKey,
+          remotePublicKey
+        );
+        this.currentRoom.sharedSessionKeys.set(peerId, sharedKey);
 
-      const safetyNumber = await this.crypto.computeSafetyNumbers(
-        this.currentUser.publicKeyBase64,
-        packet.publicKey
-      );
-      this.currentRoom.safetyNumbers.set(peerId, safetyNumber);
+        const safetyNumber = await this.crypto.computeSafetyNumbers(
+          this.currentUser.publicKeyBase64,
+          packet.publicKey
+        );
+        this.currentRoom.safetyNumbers.set(peerId, safetyNumber);
 
-      this.webrtc.peerProfiles.set(peerId, {
-        username: packet.username || 'Peer',
-        publicKey: packet.publicKey,
-        safetyNumber: safetyNumber
-      });
+        this.webrtc.peerProfiles.set(peerId, {
+          username: packet.username || 'Peer',
+          publicKey: packet.publicKey,
+          safetyNumber: safetyNumber
+        });
 
-      this.addRecentPeer(peerId);
-      this.updatePeerListUI();
-      this.showToast(`🔒 E2EE Established with ${packet.username}!`);
+        this.addRecentPeer(peerId);
+        this.updatePeerListUI();
+
+        // Reciprocal handshake: If caller initiated, send handshake-ack back with our public key
+        if (!packet.isAck) {
+          this.webrtc.sendTo(peerId, {
+            type: 'handshake',
+            isAck: true,
+            sender: this.currentUser.userId,
+            username: this.currentUser.username,
+            publicKey: this.currentUser.publicKeyBase64,
+            timestamp: Date.now()
+          });
+        }
+
+        this.showToast(`🔒 E2EE Established with ${packet.username || 'Peer'}!`);
+        this.flushPendingMessages(peerId);
+      } catch (err) {
+        console.error('Handshake processing error:', err);
+      }
       return;
     }
 
@@ -789,7 +1060,27 @@ class CipherApp {
 
         this.playSound('receive');
       } catch (err) {
-        console.error('Decryption failed for incoming message:', err);
+        console.error('Primary decryption failed for incoming message:', err);
+        // Fallback decryption with room key
+        try {
+          const fallbackJson = await this.crypto.decrypt(packet.ciphertext, packet.iv, this.currentRoom.derivedKey);
+          const msg = JSON.parse(fallbackJson);
+          const msgObj = {
+            author: msg.username || 'Peer',
+            text: msg.text,
+            time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isOutgoing: false,
+            ephemeralSeconds: msg.ephemeralDuration || 0
+          };
+          this.renderMessageBubble(msgObj);
+          if (!msgObj.ephemeralSeconds) {
+            this.savedMessages.push(msgObj);
+            await this.saveEncryptedHistory();
+          }
+          this.playSound('receive');
+        } catch (e2) {
+          console.error('Fallback decryption failed as well:', e2);
+        }
       }
     }
   }
@@ -801,22 +1092,39 @@ class CipherApp {
 
     const payload = {
       username: this.currentUser.username,
+      senderId: this.currentUser.userId,
       text: text,
       timestamp: Date.now(),
       ephemeralDuration: this.settings.ephemeralDuration
     };
 
-    const peers = Array.from(this.webrtc.connections.keys());
+    const targetPeers = Array.from(new Set([
+      ...Array.from(this.webrtc.peerProfiles.keys()),
+      ...Array.from(this.webrtc.connections.keys())
+    ]));
 
-    for (const peerId of peers) {
+    let deliveredCount = 0;
+
+    for (const peerId of targetPeers) {
       const key = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
       const { ciphertext, iv } = await this.crypto.encrypt(JSON.stringify(payload), key);
 
-      this.webrtc.sendTo(peerId, {
+      const sent = this.webrtc.sendTo(peerId, {
         type: 'encrypted-message',
+        sender: this.currentUser.userId,
         ciphertext: ciphertext,
         iv: iv
       });
+      if (sent) deliveredCount++;
+    }
+
+    if (targetPeers.length === 0) {
+      if (this.currentRoom.activeRecipientId) {
+        this.queueMessage(this.currentRoom.activeRecipientId, payload);
+        this.showToast(`⏳ Message queued. Connecting to ${this.currentRoom.activeRecipientId}...`);
+      } else {
+        this.showToast(`ℹ️ No peers connected yet. Enter a Peer ID in the sidebar or share your Public Chat Link!`);
+      }
     }
 
     const msgObj = {
@@ -824,7 +1132,8 @@ class CipherApp {
       text: text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isOutgoing: true,
-      ephemeralSeconds: this.settings.ephemeralDuration
+      ephemeralSeconds: this.settings.ephemeralDuration,
+      delivered: deliveredCount > 0
     };
 
     this.renderMessageBubble(msgObj);

@@ -1522,3 +1522,134 @@ body.privacy-blurred main {
     height: 34px;
   }
 }
+
+/* ==============================================================================
+   SYSTEM PIN LOCK & INTERACTIVE NUMPAD STYLES
+   ============================================================================== */
+.pin-overlay-card {
+  border: 1px solid var(--border-glow);
+  box-shadow: 0 0 40px rgba(0, 230, 153, 0.12), var(--shadow-glass);
+}
+
+.pin-shield-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(0, 230, 153, 0.12);
+  border: 2px solid var(--accent-primary);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  margin: 0 auto 0.85rem;
+  box-shadow: 0 0 20px var(--accent-primary-glow);
+  animation: pulse-glow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 15px var(--accent-primary-glow); }
+  50% { transform: scale(1.05); box-shadow: 0 0 25px var(--accent-primary-glow); }
+}
+
+.pin-dots-row {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0.75rem auto 1rem;
+}
+
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--text-subtle);
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pin-dot.filled {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px var(--accent-primary-glow);
+  transform: scale(1.15);
+}
+
+.pin-dot.error {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  box-shadow: 0 0 15px var(--color-danger-glow);
+}
+
+.pin-dots-row.shake {
+  animation: pin-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes pin-shake {
+  10%, 90% { transform: translate3d(-2px, 0, 0); }
+  20%, 80% { transform: translate3d(4px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+  40%, 60% { transform: translate3d(6px, 0, 0); }
+}
+
+.pin-stealth-input {
+  width: 140px;
+  margin: 0 auto 1rem;
+  text-align: center;
+  font-size: 1.6rem;
+  letter-spacing: 0.35em;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+}
+
+.pin-numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+.numpad-btn {
+  height: 52px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.numpad-btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.numpad-btn:active {
+  transform: scale(0.95);
+  background: var(--accent-primary-glow);
+}
+
+.numpad-btn.numpad-action {
+  background: var(--bg-base);
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.numpad-btn.numpad-action:hover {
+  color: var(--color-danger);
+  border-color: rgba(255, 71, 87, 0.4);
+}
+

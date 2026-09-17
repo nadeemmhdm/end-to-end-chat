@@ -172,6 +172,11 @@
         <i class='bx bx-trash'></i>
       </button>
 
+      <!-- System PIN Lock Button -->
+      <button class="btn btn-secondary" id="btn-system-lock" title="Lock System (Require PIN to Access)" style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; padding:0.45rem 0.75rem;">
+        <i class='bx bxs-lock-alt'></i> <span>Lock</span>
+      </button>
+
       <!-- Panic Killswitch (Esc / Button) -->
       <button class="btn btn-panic" id="btn-panic-wipe" title="EMERGENCY KILLSWITCH (Press ESC): Immediately wipes all keys, purges RAM, and redirects">
         <i class='bx bxs-flame'></i> Panic Wipe
@@ -346,12 +351,22 @@
           <!-- Peer Connect Box (Search/Connect by Username or ID) -->
           <div class="peer-connect-box">
             <label style="font-size:0.7rem; color:var(--text-subtle); text-transform:uppercase; font-weight:700; display:block; margin-bottom:0.35rem;">
-              <i class='bx bx-user-plus'></i> Connect to Peer (Username or ID)
+              <i class='bx bx-user-plus'></i> Connect & Message Peer
             </label>
             <div style="display:flex; gap:0.4rem;">
-              <input type="text" id="input-peer-connect" class="form-input" style="padding:0.4rem 0.6rem; font-size:0.8rem;" placeholder="e.g. usr_xxxx or Agent">
-              <button class="btn btn-primary" id="btn-connect-peer" style="padding:0.4rem 0.75rem; font-size:0.8rem;">
-                <i class='bx bx-link'></i>
+              <input type="text" id="input-peer-connect" class="form-input" style="padding:0.4rem 0.6rem; font-size:0.8rem; flex:1;" placeholder="Enter Peer ID or Agent Name">
+              <button class="btn btn-primary" id="btn-connect-peer" style="padding:0.4rem 0.75rem; font-size:0.8rem; display:flex; align-items:center; gap:0.3rem;">
+                <i class='bx bx-link'></i> Connect
+              </button>
+            </div>
+            <div id="peer-connect-status" style="font-size:0.72rem; color:var(--text-muted); margin-top:0.35rem; display:none;"></div>
+            
+            <div style="display:flex; gap:0.4rem; margin-top:0.5rem;">
+              <button type="button" class="btn btn-secondary" id="btn-test-second-tab" style="flex:1; padding:0.3rem 0.5rem; font-size:0.72rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Opens a new tab to test messaging between two tabs on this device">
+                <i class='bx bx-window-open'></i> Test 2nd Tab
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-copy-chat-quick" style="flex:1; padding:0.3rem 0.5rem; font-size:0.72rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Copy public chat URL to share">
+                <i class='bx bx-share-alt'></i> Share Link
               </button>
             </div>
           </div>
@@ -538,14 +553,19 @@
       <div class="form-group">
         <label class="form-label" for="vault-username">
           <span>Codename / Username</span>
-          <span style="font-size:0.75rem; color:var(--text-subtle);">Display identity</span>
+          <span style="font-size:0.75rem; color:var(--accent-primary);">Active chat identity</span>
         </label>
-        <div class="form-input-wrapper">
-          <i class='bx bx-user form-input-icon'></i>
-          <input type="text" id="vault-username" class="form-input" maxlength="24">
-          <button type="button" class="form-action-btn" id="btn-save-vault-username" title="Save username">
-            <i class='bx bx-check'></i>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <div class="form-input-wrapper" style="flex:1;">
+            <i class='bx bx-user form-input-icon'></i>
+            <input type="text" id="vault-username" class="form-input" maxlength="24" placeholder="Enter codename (e.g. Ghost)">
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-save-vault-username" style="padding:0.6rem 1rem; font-size:0.82rem; white-space:nowrap; display:flex; align-items:center; gap:0.35rem;" title="Save username">
+            <i class='bx bx-check'></i> Save
           </button>
+        </div>
+        <div id="vault-username-feedback" style="font-size:0.75rem; color:var(--color-success); margin-top:0.35rem; display:none;">
+          <i class='bx bx-check-circle'></i> Codename saved & synced across session
         </div>
       </div>
 
@@ -614,18 +634,53 @@
        DEVICE PIN UNLOCK OVERLAY (Active if PIN lock is enabled)
        ==================================================================== -->
   <div class="modal-backdrop" id="device-pin-overlay">
-    <div class="modal-card" style="max-width: 360px; text-align: center;">
-      <div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 230, 153, 0.15); border: 1px solid var(--accent-primary); color: var(--accent-primary); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin: 0 auto 1rem;">
+    <div class="modal-card pin-overlay-card" style="max-width: 360px; text-align: center;">
+      <div class="pin-shield-icon">
         <i class='bx bxs-lock-alt'></i>
       </div>
-      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem;">Device Locked</h3>
-      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Enter your 4-digit security PIN to access this device's encrypted chats.</p>
+      <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.35rem;">System Locked</h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.15rem;">
+        Enter your 4-digit security PIN to unlock this session.
+      </p>
       
-      <input type="password" id="unlock-pin-input" class="form-input mono" placeholder="••••" maxlength="6" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.3em; padding: 0.5rem; margin-bottom: 1rem;">
+      <!-- Visual PIN Indicator Dots -->
+      <div class="pin-dots-row" id="pin-dots-row">
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+        <span class="pin-dot"></span>
+      </div>
+
+      <!-- Hidden / Styled Input for Physical Keyboard Support -->
+      <input type="password" id="unlock-pin-input" class="form-input mono pin-stealth-input" placeholder="••••" maxlength="4" autocomplete="off" inputmode="numeric">
+
+      <!-- On-Screen Numeric Keypad -->
+      <div class="pin-numpad-grid" id="pin-numpad">
+        <button type="button" class="numpad-btn" data-key="1">1</button>
+        <button type="button" class="numpad-btn" data-key="2">2</button>
+        <button type="button" class="numpad-btn" data-key="3">3</button>
+        <button type="button" class="numpad-btn" data-key="4">4</button>
+        <button type="button" class="numpad-btn" data-key="5">5</button>
+        <button type="button" class="numpad-btn" data-key="6">6</button>
+        <button type="button" class="numpad-btn" data-key="7">7</button>
+        <button type="button" class="numpad-btn" data-key="8">8</button>
+        <button type="button" class="numpad-btn" data-key="9">9</button>
+        <button type="button" class="numpad-btn numpad-action" data-key="clear" title="Clear">C</button>
+        <button type="button" class="numpad-btn" data-key="0">0</button>
+        <button type="button" class="numpad-btn numpad-action" data-key="backspace" title="Backspace"><i class='bx bx-backspace'></i></button>
+      </div>
       
-      <button type="button" class="btn btn-primary" id="btn-unlock-pin" style="width: 100%;">
-        <i class='bx bx-lock-open-alt'></i> Unlock Device
-      </button>
+      <div style="margin-top: 1rem;">
+        <button type="button" class="btn btn-primary" id="btn-unlock-pin" style="width:100%; padding:0.65rem;">
+          <i class='bx bx-lock-open-alt'></i> Unlock Session
+        </button>
+      </div>
+
+      <div style="margin-top: 0.75rem;">
+        <button type="button" id="btn-forgot-pin" style="background:none; border:none; color:var(--text-subtle); font-size:0.75rem; cursor:pointer; text-decoration:underline;">
+          Forgot PIN? Wipe & Reset
+        </button>
+      </div>
     </div>
   </div>
 
