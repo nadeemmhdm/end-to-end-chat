@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CipherCore | Zero-Server End-to-End Encrypted (E2EE) Private Chat</title>
+  
+  <!-- SEO, AEO, & GEO Meta Tags -->
+  <meta name="description" content="CipherCore is a military-grade, zero-server, end-to-end encrypted (E2EE) peer-to-peer web chat with unique user URLs, AES-256-GCM encryption, ephemeral messages, and local encrypted persistence.">
+  <meta name="keywords" content="end to end encryption, zero server chat, private chat, E2EE, unique url chat, WebCrypto API, AES-GCM, ECDH, secure messaging, github pages chat">
+  <meta name="author" content="CipherCore Security Group">
+  <meta name="robots" content="index, follow">
+  <meta name="geo.region" content="US">
+  <meta name="geo.placename" content="Decentralized / Zero Knowledge">
+
+  <!-- Open Graph / Social Cards -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="CipherCore | Zero-Server End-to-End Encrypted Chat">
+  <meta property="og:description" content="Serverless, peer-to-peer cryptographic chat with unique user access URLs, encrypted local history, and 60-digit safety numbers.">
+  <meta property="og:image" content="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80">
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:title" content="CipherCore | Military Grade E2EE Chat">
+  <meta property="twitter:description" content="High security zero-server encrypted chat with unique user access URLs.">
+
+  <!-- Favicon & PWA Manifest -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a0d14">
+
+  <!-- Boxicons Icon Library -->
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .identity-banner {
+      background: var(--bg-surface-glass);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .url-chip-group {
+      display: flex;
+      flex: 1;
+      gap: 0.75rem;
+      min-width: 280px;
+    }
+    .url-chip {
+      flex: 1;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.4rem 0.65rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .url-chip-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .url-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .url-chip-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--accent-primary);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      outline: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .user-pill-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      padding: 0.4rem 0.85rem;
+      border-radius: var(--radius-full);
+    }
+    .user-pill-avatar {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-primary);
+      color: var(--text-inverted);
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Navigation / Security HUD -->
+  <header class="app-header">
+    <a href="index.html" class="brand-section" title="CipherCore E2EE Architecture">
+      <div class="brand-shield">
+        <i class='bx bxs-shield-quarter'></i>
+      </div>
+      <div>
+        <div class="brand-title">
+          CipherCore <span class="brand-badge">Zero-Server E2EE</span>
+        </div>
+      </div>
+    </a>
+
+    <div class="header-actions">
+      <!-- Active User Profile Pill -->
+      <div class="user-pill-badge">
+        <div class="user-pill-avatar" id="user-avatar-badge">A</div>
+        <div style="font-size: 0.8rem;">
+          <strong id="user-badge-name" style="color: var(--text-main);">Agent</strong>
+          <span id="user-badge-id" style="display:block; font-family:var(--font-mono); font-size:0.68rem; color:var(--text-subtle);">usr_...</span>
+        </div>
+      </div>
+
+      <!-- Threat Model & Whitepaper Link -->
+      <a href="audit.html" class="btn btn-secondary btn-icon" title="Cryptographic Threat Model & Whitepaper">
+        <i class='bx bx-book-open'></i>
+      </a>
+
+      <!-- Theme Switcher -->
+      <button class="btn btn-secondary btn-icon" id="btn-theme-toggle" title="Cycle Dark Cyber Themes" onclick="cycleAppTheme()">
+        <i class='bx bx-palette'></i>
+      </button>
+
+      <!-- Decoy Mode Toggle (Calculator disguise) -->
+      <button class="btn btn-secondary btn-icon" id="btn-toggle-decoy" title="Stealth / Camouflage Mode (Calculator)">
+        <i class='bx bx-calculator'></i>
+      </button>
+
+      <!-- Reset / Wipe Account Button -->
+      <button class="btn btn-secondary btn-icon" id="btn-reset-account" title="Wipe Local Account & History">
+        <i class='bx bx-trash'></i>
+      </button>
+
+      <!-- Panic Killswitch (Esc / Button) -->
+      <button class="btn btn-panic" id="btn-panic-wipe" title="EMERGENCY KILLSWITCH (Press ESC): Immediately wipes all keys, purges RAM, and redirects">
+        <i class='bx bxs-flame'></i> Panic Wipe
+      </button>
+    </div>
+  </header>
+
+  <!-- Identity Access URLs Banner -->
+  <section class="identity-banner">
+    <div class="url-chip-group">
+      <!-- 1. Unique Private Access URL -->
+      <div class="url-chip" style="border-color: rgba(0, 230, 153, 0.3);">
+        <div class="url-chip-label" style="color: var(--accent-primary);">
+          <i class='bx bx-key'></i> Your Unique Access URL (Bookmark to access this account)
+        </div>
+        <div class="url-chip-row">
+          <input type="text" id="unique-access-url" class="url-chip-input" readonly spellcheck="false">
+          <button class="btn btn-icon" id="btn-copy-access-url" style="width:28px; height:28px; font-size:1rem;" title="Copy Private Access URL">
+            <i class='bx bx-copy'></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Public Chat Link (for others to message you) -->
+      <div class="url-chip" style="border-color: rgba(59, 130, 246, 0.3);">
+        <div class="url-chip-label" style="color: #60a5fa;">
+          <i class='bx bx-share-alt'></i> Public Chat Link (Share with friends so they message you)
+        </div>
+        <div class="url-chip-row">
+          <input type="text" id="public-chat-url" class="url-chip-input" style="color:#93c5fd;" readonly spellcheck="false">
+          <button class="btn btn-icon" id="btn-copy-public-url" style="width:28px; height:28px; font-size:1rem;" title="Copy Public Chat Link">
+            <i class='bx bx-copy'></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Application Main Body -->
+  <main class="app-container">
+
+    <!-- ====================================================================
+         VIEW 1: ONBOARDING & SETUP VIEW
+         ==================================================================== -->
+    <section id="view-setup" class="view">
+      <div class="setup-view-wrapper">
+        <div class="hero-header">
+          <div class="hero-pill">
+            <i class='bx bxs-lock-alt'></i> 100% Zero-Server Architecture • In-RAM Cryptography
+          </div>
+          <h1 class="hero-title">
+            Military-Grade <span class="hero-highlight">P2P Encrypted</span> Messaging
+          </h1>
+          <p class="hero-desc">
+            Direct peer-to-peer authenticated chat. No databases, no logs, zero cloud servers. Messages are encrypted with AES-256-GCM, PBKDF2 600k rounds, and ephemeral ECDH keys.
+          </p>
+        </div>
+
+        <!-- Setup Card -->
+        <div class="glass-card">
+          <div class="card-tabs">
+            <button class="tab-btn active" data-tab="create">
+              <i class='bx bx-user-pin'></i> Create New Identity
+            </button>
+            <button class="tab-btn" data-tab="join">
+              <i class='bx bx-chat'></i> Connect to Peer ID
+            </button>
+          </div>
+
+          <form onsubmit="return false;">
+            <div class="form-group">
+              <label class="form-label" for="setup-username">
+                <span>Codename / Username</span>
+                <span style="font-size:0.75rem; color:var(--text-subtle);">Pseudonymous Identity</span>
+              </label>
+              <div class="form-input-wrapper">
+                <i class='bx bx-user-circle form-input-icon'></i>
+                <input type="text" id="setup-username" class="form-input" placeholder="e.g. Agent_Ghost" autocomplete="off" maxlength="24">
+              </div>
+            </div>
+
+            <div class="form-group" id="room-id-field" style="display: none;">
+              <label class="form-label" for="setup-room-id">
+                <span>Target Peer / User ID</span>
+                <span style="font-size:0.75rem; color:var(--text-subtle);">usr_...</span>
+              </label>
+              <div class="form-input-wrapper">
+                <i class='bx bx-hash form-input-icon'></i>
+                <input type="text" id="setup-room-id" class="form-input mono" placeholder="e.g. usr_a4f91b0c" autocomplete="off">
+              </div>
+            </div>
+
+            <!-- Auto-Generated 16-Character High-Security Password -->
+            <div class="form-group">
+              <label class="form-label" for="setup-password">
+                <span>16-Character Cryptographic Key</span>
+                <span style="font-size:0.75rem; color:var(--accent-primary);">Auto-Generated CSPRNG</span>
+              </label>
+              <div class="form-input-wrapper">
+                <i class='bx bx-key form-input-icon'></i>
+                <input type="text" id="setup-password" class="form-input mono" autocomplete="off" spellcheck="false">
+                <button type="button" class="form-action-btn" id="btn-copy-password" title="Copy Key to Clipboard">
+                  <i class='bx bx-copy'></i>
+                </button>
+              </div>
+
+              <div class="password-generator-bar">
+                <div class="entropy-meter">
+                  <div class="entropy-dots">
+                    <span class="entropy-dot"></span>
+                    <span class="entropy-dot"></span>
+                    <span class="entropy-dot"></span>
+                    <span class="entropy-dot"></span>
+                  </div>
+                  <span id="password-entropy" style="color:var(--accent-primary); font-weight:700;">102 bits</span>
+                </div>
+                <div class="generator-controls">
+                  <button type="button" class="generator-btn" id="btn-regen-password">
+                    <i class='bx bx-refresh'></i> Regenerate 16-Char Key
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" id="btn-submit-action" data-action="create" style="width: 100%; margin-top: 1.25rem; padding: 0.85rem;">
+              <i class='bx bxs-shield-plus'></i> Generate New Identity & Key
+            </button>
+          </form>
+
+          <div class="security-guarantees-grid">
+            <div class="guarantee-item">
+              <i class='bx bx-check-shield'></i>
+              <span>AES-256-GCM AEAD</span>
+            </div>
+            <div class="guarantee-item">
+              <i class='bx bx-sync'></i>
+              <span>ECDH P-256 Forward Secrecy</span>
+            </div>
+            <div class="guarantee-item">
+              <i class='bx bx-chip'></i>
+              <span>PBKDF2 600k Iterations</span>
+            </div>
+            <div class="guarantee-item">
+              <i class='bx bx-server'></i>
+              <span>Zero-Server / GitHub Pages</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         VIEW 2: ACTIVE CHATROOM & REAL-TIME P2P INTERFACE
+         ==================================================================== -->
+    <section id="view-chat" class="view active">
+      <div class="chat-layout">
+
+        <!-- Sidebar: Peer Mesh & Ephemeral Settings -->
+        <aside class="chat-sidebar" id="chat-sidebar">
+          <div class="sidebar-header">
+            <div class="room-meta">
+              <div class="room-label">Your User ID</div>
+              <div class="room-id-display">
+                <i class='bx bx-broadcast' style="color:var(--accent-primary);"></i>
+                <span id="chat-room-id">usr_active</span>
+              </div>
+            </div>
+            <button class="btn btn-icon" id="btn-share-invite" title="Copy Public Chat Link">
+              <i class='bx bx-link-external'></i>
+            </button>
+          </div>
+
+          <div class="sidebar-section-title">
+            <span>Direct Connected Peers (<span id="connected-peer-count">0</span>)</span>
+          </div>
+
+          <ul class="peer-list" id="chat-peer-list">
+            <!-- Dynamically populated peer items -->
+          </ul>
+
+          <div class="ephemeral-timer-selector">
+            <label class="timer-label" for="select-ephemeral-timer">
+              <i class='bx bx-timer'></i> Burn Timer
+            </label>
+            <select id="select-ephemeral-timer" class="timer-select">
+              <option value="0">Off (Persistent Encrypted)</option>
+              <option value="10">10 Seconds</option>
+              <option value="30">30 Seconds</option>
+              <option value="60">1 Minute</option>
+              <option value="300">5 Minutes</option>
+              <option value="3600">1 Hour</option>
+            </select>
+          </div>
+        </aside>
+
+        <!-- Main Chat Feed & Controls -->
+        <section class="chat-main">
+          <div class="chat-top-banner">
+            <div class="security-indicator">
+              <button class="btn btn-icon mobile-menu-btn" onclick="document.getElementById('chat-sidebar').classList.toggle('open')">
+                <i class='bx bx-menu'></i>
+              </button>
+              <span class="verified-lock-badge">
+                <i class='bx bxs-lock-alt'></i> E2EE Active
+              </span>
+              <span style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">
+                <i class='bx bx-radar'></i> P2P WebRTC Direct
+              </span>
+            </div>
+
+            <div class="chat-banner-actions">
+              <button class="btn btn-secondary" id="btn-open-safety-modal" title="View 60-digit Safety Numbers">
+                <i class='bx bx-fingerprint'></i> Safety Numbers
+              </button>
+            </div>
+          </div>
+
+          <!-- Messages Stream -->
+          <div class="messages-container" id="messages-container">
+            <div class="chat-welcome-notice">
+              <i class='bx bxs-lock-alt'></i>
+              <strong>End-to-End Encrypted Tunnel Active</strong>
+              <p style="margin-top:0.35rem; font-size:0.8rem; color:var(--text-subtle);">
+                Only devices in this channel hold the cryptographic keys. Persistent messages are stored encrypted in your local browser vault.
+              </p>
+            </div>
+          </div>
+
+          <!-- Chat Input Bar -->
+          <div class="chat-input-area">
+            <div class="typing-indicator-bar" id="typing-indicator"></div>
+
+            <div class="input-controls-row">
+              <input type="file" id="file-input" style="display: none;">
+              <button class="btn btn-icon" id="btn-attach-file" title="Send Encrypted File or Media">
+                <i class='bx bx-paperclip'></i>
+              </button>
+
+              <button class="btn btn-icon" id="btn-record-voice" title="Record Encrypted Voice Note">
+                <i class='bx bx-microphone'></i>
+              </button>
+
+              <div class="recording-bar" id="recording-bar" style="display: none;">
+                <div class="recording-duration">
+                  <span class="recording-dot"></span>
+                  <span id="recording-duration">00:00</span>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                  <button class="btn btn-icon" id="btn-cancel-recording" style="background:transparent; color:#ff4757;">
+                    <i class='bx bx-x'></i>
+                  </button>
+                  <button class="btn btn-icon" id="btn-send-recording" style="background:var(--color-danger); color:#fff;">
+                    <i class='bx bx-check'></i>
+                  </button>
+                </div>
+              </div>
+
+              <input type="text" id="chat-message-input" class="chat-input" placeholder="Type an encrypted message... (Enter to send)" autocomplete="off">
+
+              <button class="btn btn-primary btn-icon" id="btn-send-message" title="Send Message">
+                <i class='bx bxs-send'></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ====================================================================
+       MODAL: SAFETY NUMBERS & SAS VERIFICATION
+       ==================================================================== -->
+  <div class="modal-backdrop" id="modal-safety-verification">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <i class='bx bx-fingerprint' style="color:var(--accent-primary);"></i> Cryptographic Safety Numbers
+        </h3>
+        <button class="btn btn-icon btn-close-modal">
+          <i class='bx bx-x'></i>
+        </button>
+      </div>
+
+      <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+        Compare these 60 numbers with your peer over another secure channel (or in person). If they match exactly, your connection is guaranteed free from any Man-In-The-Middle (MITM) surveillance.
+      </p>
+
+      <div class="safety-number-box">
+        <div class="safety-digits-grid" id="safety-digits-grid">
+          <!-- 12 blocks of 5 digits rendered here -->
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 1rem;">
+        <button class="btn btn-primary" id="btn-verify-safety-ok" style="width: 100%;">
+          <i class='bx bx-check-double'></i> I Have Verified Numbers
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       DECOY MODE / STEALTH CALCULATOR
+       ==================================================================== -->
+  <div class="decoy-screen" id="decoy-screen">
+    <div class="calculator-wrapper">
+      <input type="text" id="calc-display" class="calc-display" value="0" readonly>
+      <div class="calc-grid">
+        <button class="calc-btn action">C</button>
+        <button class="calc-btn action">(</button>
+        <button class="calc-btn action">)</button>
+        <button class="calc-btn operator">/</button>
+
+        <button class="calc-btn">7</button>
+        <button class="calc-btn">8</button>
+        <button class="calc-btn">9</button>
+        <button class="calc-btn operator">*</button>
+
+        <button class="calc-btn">4</button>
+        <button class="calc-btn">5</button>
+        <button class="calc-btn">6</button>
+        <button class="calc-btn operator">-</button>
+
+        <button class="calc-btn">1</button>
+        <button class="calc-btn">2</button>
+        <button class="calc-btn">3</button>
+        <button class="calc-btn operator">+</button>
+
+        <button class="calc-btn">0</button>
+        <button class="calc-btn">.</button>
+        <button class="calc-btn operator" style="grid-column: span 2;">=</button>
+      </div>
+    </div>
+    <div style="margin-top: 1.5rem; color: #5f6368; font-size: 0.75rem;">
+      Double-click or enter secret code <strong>1337 =</strong> to unlock
+    </div>
+  </div>
+
+  <!-- External PeerJS Library for WebRTC Signaling & Mesh -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <!-- Application Logic -->
+  <script src="js/crypto.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Theme Switching Script Helper -->
+  <script>
+    const themes = ['stealth', 'violet', 'cyan'];
+    let currentThemeIdx = 0;
+    function cycleAppTheme() {
+      currentThemeIdx = (currentThemeIdx + 1) % themes.length;
+      const theme = themes[currentThemeIdx];
+      if (theme === 'stealth') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+      if (window.cipherApp) {
+        window.cipherApp.showToast(`Theme switched to ${theme.toUpperCase()}`);
+      }
+    }
+  </script>
+</body>
+</html>
