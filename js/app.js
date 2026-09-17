@@ -182,13 +182,15 @@ class CipherApp {
   // ONE DEVICE, ONE ACCOUNT LIFECYCLE
   // ============================================================================
   async initOneDeviceAccountFlow() {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashClean = window.location.hash.replace(/^#/, '');
+    const hashParams = new URLSearchParams(hashClean);
 
-    const accountId = params.get('account');
-    const accountKey = params.get('key');
-    const accountUser = params.get('user');
-    const chatTargetId = params.get('chat');
+    const accountId = searchParams.get('account') || hashParams.get('account');
+    const accountKey = searchParams.get('key') || hashParams.get('key');
+    const accountUser = searchParams.get('user') || hashParams.get('user');
+    let chatTargetId = searchParams.get('chat') || hashParams.get('chat');
+    if (chatTargetId) chatTargetId = decodeURIComponent(chatTargetId).trim();
 
     // Check if this device already has an established account
     const existingDeviceAccountRaw = localStorage.getItem(this.STORAGE_DEVICE_ACCOUNT);
@@ -364,6 +366,9 @@ class CipherApp {
 
   // Check if user enabled a device PIN
   checkPinLockAndUnlock(chatTargetId) {
+    if (chatTargetId) {
+      this.pendingChatTargetId = chatTargetId;
+    }
     const savedPin = localStorage.getItem(this.STORAGE_DEVICE_PIN);
     if (savedPin && this.devicePinOverlay) {
       this.devicePinOverlay.classList.add('active');
@@ -371,14 +376,17 @@ class CipherApp {
       this.updatePinDotsUI();
       if (this.unlockPinInput) this.unlockPinInput.focus();
     } else {
-      if (chatTargetId) {
-        this.handleDirectChatWithPeer(chatTargetId);
+      if (this.pendingChatTargetId) {
+        const target = this.pendingChatTargetId;
+        this.pendingChatTargetId = null;
+        this.handleDirectChatWithPeer(target);
       }
     }
   }
 
   updateUserBadgeUI() {
-    if (this.userBadgeId) this.userBadgeId.textContent = this.currentUser.userId;
+    const activeDisplayId = this.webrtc.myPeerId || this.currentUser.userId;
+    if (this.userBadgeId) this.userBadgeId.textContent = activeDisplayId;
     if (this.userBadgeName) this.userBadgeName.textContent = this.currentUser.username;
     if (this.userAvatarBadge) this.userAvatarBadge.textContent = this.currentUser.username.charAt(0).toUpperCase();
   }
@@ -407,14 +415,16 @@ class CipherApp {
     }
 
     // Public Chat Link (share with friends so they message you directly)
-    const publicChatUrl = `${baseUrl}#chat=${this.currentUser.userId}`;
+    const activePeerId = this.webrtc.myPeerId || this.currentUser.userId;
+    const publicChatUrl = `${baseUrl}#chat=${activePeerId}`;
     if (this.publicChatUrlInput) {
       this.publicChatUrlInput.value = publicChatUrl;
     }
 
-    // Synchronize browser address bar hash if not currently connecting to #chat=
+    // Synchronize browser address bar hash if not currently connecting to #chat= or ?chat=
     if (window.history && window.history.replaceState) {
-      if (!window.location.hash.startsWith('#chat=')) {
+      const hasChatParam = window.location.hash.includes('chat=') || window.location.search.includes('chat=');
+      if (!hasChatParam) {
         window.history.replaceState(null, '', privateAccessUrl);
       }
     }
@@ -422,24 +432,68 @@ class CipherApp {
 
   async initializeWebRTCIdentity(userId) {
     try {
-      await this.webrtc.initialize(userId);
-      this.currentUser.peerId = userId;
+      const assignedId = await this.webrtc.initialize(userId);
+      this.currentUser.peerId = assignedId;
       this.updatePeerListUI();
+      this.updateUniqueUrls();
+      this.updateUserBadgeUI();
 
       this.webrtc.onHandshakeReady = (targetPeerId) => {
         this.sendHandshake(targetPeerId);
       };
+
+      // Flush any connection queued before WebRTC finished initializing
+      if (this.pendingChatTargetId) {
+        const target = this.pendingChatTargetId;
+        this.pendingChatTargetId = null;
+        this.handleDirectChatWithPeer(target);
+      }
     } catch (err) {
       console.warn('WebRTC Init Notice:', err);
     }
   }
 
   handleDirectChatWithPeer(targetPeerId) {
-    if (!targetPeerId || targetPeerId === this.currentUser.userId) return;
+    if (!targetPeerId) return;
+    targetPeerId = targetPeerId.trim();
 
-    this.showToast(`Connecting to peer ${targetPeerId}...`);
+    // Clean up full link if user pasted https://...#chat=usr_... or ?chat=usr_...
+    if (targetPeerId.includes('chat=')) {
+      try {
+        const m = targetPeerId.match(/[?#&]chat=([^&#]+)/);
+        if (m && m[1]) {
+          targetPeerId = decodeURIComponent(m[1]).trim();
+        }
+      } catch (e) {}
+    }
+
+    // Guard: Prevent self-connection loop if connecting to own active peer ID
+    if (this.webrtc.myPeerId && targetPeerId === this.webrtc.myPeerId) {
+      this.showToast('⚠️ You cannot connect to your own active Peer ID. Share your link with another person or tab to chat.');
+      if (this.peerConnectStatus) {
+        this.peerConnectStatus.style.display = 'block';
+        this.peerConnectStatus.textContent = 'Cannot connect to your own active Peer ID.';
+        this.peerConnectStatus.style.color = '#f59e0b';
+      }
+      return;
+    }
+
+    if (this.peerConnectStatus) {
+      this.peerConnectStatus.style.display = 'block';
+      this.peerConnectStatus.textContent = `Connecting to ${targetPeerId.slice(0, 16)}...`;
+      this.peerConnectStatus.style.color = 'var(--text-muted)';
+    }
+
+    this.showToast(`Connecting to peer ${targetPeerId.slice(0, 14)}...`);
     this.currentRoom.activeRecipientId = targetPeerId;
     this.addRecentPeer(targetPeerId);
+
+    // If WebRTC is not ready yet, queue the connection
+    if (!this.webrtc.myPeerId || !this.webrtc.peer || this.webrtc.peer.destroyed) {
+      this.pendingChatTargetId = targetPeerId;
+      this.showToast(`⏳ Initializing secure channel before connecting to ${targetPeerId.slice(0, 12)}...`);
+      return;
+    }
 
     try {
       this.webrtc.connectToPeer(targetPeerId, {
@@ -448,6 +502,10 @@ class CipherApp {
       });
     } catch (e) {
       console.error('Direct connect error:', e);
+      if (this.peerConnectStatus) {
+        this.peerConnectStatus.textContent = `Connection error: ${e.message}`;
+        this.peerConnectStatus.style.color = '#ef4444';
+      }
     }
   }
 
@@ -672,11 +730,22 @@ class CipherApp {
     if (this.btnTestSecondTab) {
       this.btnTestSecondTab.addEventListener('click', () => {
         const baseUrl = window.location.origin + window.location.pathname;
-        const testUrl = `${baseUrl}#chat=${this.currentUser.userId}`;
+        const targetId = this.webrtc.myPeerId || this.currentUser.userId;
+        const testUrl = `${baseUrl}#chat=${targetId}`;
         window.open(testUrl, '_blank');
         this.showToast('🚀 Opened 2nd tab to test live encrypted messaging!');
       });
     }
+
+    // Dynamic URL hash listener for direct chat links
+    window.addEventListener('hashchange', () => {
+      const hashClean = window.location.hash.replace(/^#/, '');
+      const hashParams = new URLSearchParams(hashClean);
+      const target = hashParams.get('chat');
+      if (target) {
+        this.handleDirectChatWithPeer(decodeURIComponent(target).trim());
+      }
+    });
 
     // Quick Share Link Button
     if (this.btnCopyChatQuick) {
@@ -809,13 +878,22 @@ class CipherApp {
   bindWebRTCEvents() {
     this.webrtc.on('peerConnect', async ({ peerId }) => {
       this.showToast(`Peer ${peerId.slice(0, 8)} connected! Exchanging keys...`);
+      if (this.peerConnectStatus) {
+        this.peerConnectStatus.style.display = 'block';
+        this.peerConnectStatus.textContent = `Connected to ${peerId.slice(0, 10)}! Exchanging keys...`;
+        this.peerConnectStatus.style.color = '#10b981';
+      }
       this.addRecentPeer(peerId);
       this.updatePeerListUI();
       this.playSound('alert');
     });
 
-    this.webrtc.on('peerDisconnect', () => {
-      this.showToast(`A peer disconnected.`);
+    this.webrtc.on('peerDisconnect', ({ peerId }) => {
+      this.showToast(`Peer disconnected.`);
+      if (this.peerConnectStatus) {
+        this.peerConnectStatus.textContent = `Peer disconnected.`;
+        this.peerConnectStatus.style.color = 'var(--text-muted)';
+      }
       this.updatePeerListUI();
     });
 
@@ -829,6 +907,14 @@ class CipherApp {
 
     this.webrtc.on('error', (err) => {
       console.warn('WebRTC Notice:', err);
+      if (err && (err.type === 'peer-unavailable' || (err.message && err.message.includes('Could not connect')))) {
+        this.showToast('⚠️ Target peer is offline or unreachable. Please verify their User ID.');
+        if (this.peerConnectStatus) {
+          this.peerConnectStatus.style.display = 'block';
+          this.peerConnectStatus.textContent = 'Peer unreachable or offline.';
+          this.peerConnectStatus.style.color = '#ef4444';
+        }
+      }
     });
   }
 
@@ -909,6 +995,11 @@ class CipherApp {
         this.updatePinDotsUI();
         this.showToast('🔓 Session unlocked successfully!');
         this.playSound('send');
+        if (this.pendingChatTargetId) {
+          const target = this.pendingChatTargetId;
+          this.pendingChatTargetId = null;
+          this.handleDirectChatWithPeer(target);
+        }
       } else {
         const state = getLockoutState();
         state.failedAttempts++;
@@ -1212,6 +1303,11 @@ class CipherApp {
         }
 
         this.showToast(`🔒 Authenticated E2EE Established with ${packet.username || 'Peer'}!`);
+        if (this.peerConnectStatus) {
+          this.peerConnectStatus.style.display = 'block';
+          this.peerConnectStatus.textContent = `Active E2EE chat with ${packet.username || peerId.slice(0, 10)}`;
+          this.peerConnectStatus.style.color = '#10b981';
+        }
         this.flushPendingMessages(peerId);
       } catch (err) {
         console.error('Handshake processing error:', err);

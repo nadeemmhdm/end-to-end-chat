@@ -15,7 +15,7 @@ class WebRTCManager {
   constructor(options = {}) {
     this.options = {
       debug: false,
-      privacyMode: true, // Shields local LAN host IPs from candidate leakage
+      privacyMode: false, // Default false to allow local network & same-machine direct WebRTC connections
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -44,9 +44,10 @@ class WebRTCManager {
     this.tabInstanceId = 'tab_' + Math.random().toString(36).substring(2, 9);
 
     // Cryptographic Session Mesh Token (blocks unauthorized script injection into BroadcastChannel)
+    // Shared via localStorage across same-origin tabs
     this.meshAuthToken = null;
     try {
-      this.meshAuthToken = sessionStorage.getItem('cc_mesh_auth_token');
+      this.meshAuthToken = localStorage.getItem('cc_mesh_auth_token');
       if (!this.meshAuthToken) {
         const tokenBytes = new Uint8Array(24);
         if (window.crypto && window.crypto.getRandomValues) {
@@ -55,10 +56,10 @@ class WebRTCManager {
         } else {
           this.meshAuthToken = 'mat_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
         }
-        sessionStorage.setItem('cc_mesh_auth_token', this.meshAuthToken);
+        localStorage.setItem('cc_mesh_auth_token', this.meshAuthToken);
       }
     } catch (e) {
-      this.meshAuthToken = 'mat_ephemeral_' + Math.random().toString(36).substring(2);
+      this.meshAuthToken = 'mat_shared_default_token';
     }
 
     // Periodic sweep for abandoned file transfers (prevents memory leak DoS)
@@ -167,16 +168,21 @@ class WebRTCManager {
     }
 
     if (this.connections.has(targetPeerId)) {
-      return this.connections.get(targetPeerId);
+      const existingConn = this.connections.get(targetPeerId);
+      if (existingConn && existingConn.open) {
+        return existingConn;
+      }
+      this.connections.delete(targetPeerId);
     }
 
-    // Ping local mesh immediately
+    // Ping local mesh immediately with auth token
     if (this.broadcastChannel) {
       this.broadcastChannel.postMessage({
         type: 'mesh-discovery-ping',
         senderPeerId: this.myPeerId,
         targetPeerId: targetPeerId,
         tabId: this.tabInstanceId,
+        token: this.meshAuthToken,
         metadata: metadata
       });
     }
@@ -269,6 +275,14 @@ class WebRTCManager {
 
     if (packet.type === 'mesh-discovery-ping') {
       if (this.broadcastChannel && this.myPeerId) {
+        // If targeted ping, verify match (including prefix match for instance collision)
+        if (packet.targetPeerId && 
+            packet.targetPeerId !== this.myPeerId && 
+            !this.myPeerId.startsWith(packet.targetPeerId) && 
+            !packet.targetPeerId.startsWith(this.myPeerId)) {
+          return;
+        }
+
         // Send Pong response back
         this.broadcastChannel.postMessage({
           type: 'mesh-discovery-pong',
@@ -292,7 +306,11 @@ class WebRTCManager {
     }
 
     if (packet.type === 'mesh-discovery-pong') {
-      if (packet.targetPeerId === this.myPeerId || !packet.targetPeerId) {
+      const isMatch = !packet.targetPeerId || 
+                      packet.targetPeerId === this.myPeerId || 
+                      this.myPeerId.startsWith(packet.targetPeerId) || 
+                      packet.targetPeerId.startsWith(this.myPeerId);
+      if (isMatch) {
         this.emit('peerConnect', {
           peerId: packet.senderPeerId,
           isLocalMesh: true
@@ -306,7 +324,11 @@ class WebRTCManager {
     }
 
     if (packet.type === 'mesh-direct-data') {
-      if (packet.targetPeerId === this.myPeerId || !packet.targetPeerId) {
+      const isMatch = !packet.targetPeerId || 
+                      packet.targetPeerId === this.myPeerId || 
+                      this.myPeerId.startsWith(packet.targetPeerId) || 
+                      packet.targetPeerId.startsWith(this.myPeerId);
+      if (isMatch) {
         this._processIncomingData(packet.senderPeerId, packet.payload);
       }
       return;
