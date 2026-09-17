@@ -1581,7 +1581,7 @@ class CipherApp {
       this.savedMessages = history;
       history.forEach(item => {
         if (item.type === 'file' || item.type === 'image') {
-          if (!item.dataUrl && item.base64Data) {
+          if (item.base64Data) {
             try {
               const buf = this.crypto.base64ToBuffer(item.base64Data);
               const blob = new Blob([buf], { type: item.fileType || 'application/octet-stream' });
@@ -1590,7 +1590,7 @@ class CipherApp {
           }
           this.renderFileCard(item);
         } else if (item.type === 'voice') {
-          if (!item.dataUrl && item.base64Audio) {
+          if (item.base64Audio) {
             try {
               const buf = this.crypto.base64ToBuffer(item.base64Audio);
               const blob = new Blob([buf], { type: item.mimeType || 'audio/webm' });
@@ -2283,6 +2283,7 @@ class CipherApp {
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,
+          base64Data: base64Data,
           isImage: isImg,
           author: this.currentUser.username,
           isOutgoing: true,
@@ -2365,6 +2366,7 @@ class CipherApp {
         fileName: metadata.fileName || (isImg ? 'image.png' : 'file.bin'),
         fileSize: metadata.fileSize || buffer.byteLength,
         fileType: metadata.fileType,
+        base64Data: decryptedBase64,
         isImage: isImg,
         author: metadata.author || 'Peer',
         isOutgoing: false,
@@ -2381,6 +2383,75 @@ class CipherApp {
     } catch (err) {
       console.error('File/voice decryption failed:', err);
       this.showToast('Error decrypting incoming media: ' + (err.message || 'Key mismatch'));
+    }
+  }
+
+  // Reliable, cross-browser file downloader (forces binary download to prevent PDF viewer interception)
+  downloadFile(fileInfo) {
+    if (!fileInfo) return;
+    try {
+      const fileName = fileInfo.fileName || 'download';
+      let blob = null;
+
+      if (fileInfo.base64Data) {
+        const buf = this.crypto.base64ToBuffer(fileInfo.base64Data);
+        // Force octet-stream so the browser downloads instead of opening in-browser PDF/media viewer
+        blob = new Blob([buf], { type: 'application/octet-stream' });
+      } else if (fileInfo.dataUrl && fileInfo.dataUrl.startsWith('data:')) {
+        const parts = fileInfo.dataUrl.split(',');
+        const b64 = parts[1];
+        if (b64) {
+          const buf = this.crypto.base64ToBuffer(b64);
+          blob = new Blob([buf], { type: 'application/octet-stream' });
+        }
+      }
+
+      const triggerDownloadWithBlob = (targetBlob) => {
+        const url = URL.createObjectURL(targetBlob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = fileName;
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (e) {}
+        }, 2000);
+      };
+
+      if (blob) {
+        triggerDownloadWithBlob(blob);
+      } else if (fileInfo.dataUrl && !fileInfo.dataUrl.startsWith('blob:null')) {
+        fetch(fileInfo.dataUrl)
+          .then(res => res.blob())
+          .then(liveBlob => {
+            const forceBlob = new Blob([liveBlob], { type: 'application/octet-stream' });
+            triggerDownloadWithBlob(forceBlob);
+          })
+          .catch(() => {
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = fileInfo.dataUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              try { document.body.removeChild(a); } catch (e) {}
+            }, 500);
+          });
+      } else {
+        this.showToast('⚠️ File data is unavailable for download.');
+        return;
+      }
+
+      this.showToast(`📥 Downloading "${fileName}"...`);
+    } catch (err) {
+      console.error('Download execution error:', err);
+      this.showToast('Download error: ' + err.message);
     }
   }
 
@@ -2416,10 +2487,17 @@ class CipherApp {
       dlRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:0.4rem; font-size:0.75rem;';
       dlRow.innerHTML = `
         <span style="color:var(--text-muted);">${(fileInfo.fileSize / 1024).toFixed(1)} KB</span>
-        <a href="${fileInfo.dataUrl}" download="${this.escapeHTML(fileInfo.fileName)}" class="file-download-btn" style="padding:0.25rem 0.55rem; font-size:0.75rem;">
+        <button type="button" class="file-download-btn" style="padding:0.25rem 0.55rem; font-size:0.75rem;">
           <i class='bx bxs-download'></i> Save
-        </a>
+        </button>
       `;
+      const imgSaveBtn = dlRow.querySelector('.file-download-btn');
+      if (imgSaveBtn) {
+        imgSaveBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.downloadFile(fileInfo);
+        });
+      }
       bubble.appendChild(dlRow);
     } else {
       const card = document.createElement('div');
@@ -2437,10 +2515,17 @@ class CipherApp {
           <div class="file-name">${this.escapeHTML(fileInfo.fileName)}</div>
           <div class="file-size">${sizeFormatted} • E2EE File</div>
         </div>
-        <a href="${fileInfo.dataUrl}" download="${this.escapeHTML(fileInfo.fileName)}" class="file-download-btn">
+        <button type="button" class="file-download-btn">
           <i class='bx bxs-download'></i> Save
-        </a>
+        </button>
       `;
+      const saveBtn = card.querySelector('.file-download-btn');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.downloadFile(fileInfo);
+        });
+      }
       bubble.appendChild(card);
     }
 
@@ -2780,15 +2865,6 @@ class CipherApp {
         </div>
 
         <span class="voice-time-display" id="${playerId}_time">0:00</span>
-      </div>
-
-      <div class="voice-footer-controls">
-        <span style="font-size:0.7rem; color:var(--text-subtle);">
-          <i class='bx bx-shield-quarter'></i> AES-256-GCM • ${voiceInfo.fileSize ? (voiceInfo.fileSize / 1024).toFixed(1) + ' KB' : 'Opus'}
-        </span>
-        <a href="${voiceInfo.dataUrl}" download="${this.escapeHTML(voiceInfo.fileName || 'voice-note.webm')}" class="voice-save-btn" title="Download Decrypted Voice Note">
-          <i class='bx bxs-download'></i> Save
-        </a>
       </div>
     `;
 
