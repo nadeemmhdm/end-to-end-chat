@@ -13,6 +13,9 @@
   <meta name="geo.region" content="US">
   <meta name="geo.placename" content="Decentralized / Zero Knowledge">
 
+  <!-- Content Security Policy (Strict Supply-Chain & Zero-Exfiltration Defense) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com https://unpkg.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' wss://0.peerjs.com https://0.peerjs.com wss://*.peerjs.com https://*.peerjs.com;">
+
   <!-- Open Graph / Social Cards -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="CipherCore | Zero-Server End-to-End Encrypted Chat">
@@ -404,6 +407,9 @@
               <span class="verified-lock-badge">
                 <i class='bx bxs-lock-alt'></i> E2EE Active
               </span>
+              <span id="chat-peer-trust-badge" style="font-size: 0.75rem; padding: 0.2rem 0.55rem; border-radius: 20px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); display: inline-flex; align-items: center; gap: 0.25rem;">
+                <i class='bx bx-shield-quarter'></i> <span id="peer-trust-status-text">Handshake Secured</span>
+              </span>
               <span style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">
                 <i class='bx bx-radar'></i> P2P WebRTC Direct
               </span>
@@ -767,8 +773,8 @@
     </div>
   </div>
 
-  <!-- External PeerJS Library for WebRTC Signaling & Mesh -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Self-Hosted PeerJS Library with Subresource Integrity (SRI) -->
+  <script src="js/vendor/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
 
   <!-- Application Logic -->
   <script src="js/crypto.js"></script>

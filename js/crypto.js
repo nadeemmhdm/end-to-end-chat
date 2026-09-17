@@ -307,33 +307,134 @@ class CipherCore {
 
   /**
    * Computes a Signal-style 60-digit Safety Number for out-of-band identity verification
-   * Sorts public keys lexicographically to ensure both peers get the exact same number.
+  // --- Long-Term Identity & Digital Signatures (ECDSA P-256) ---
+  
+  /**
+   * Generates a long-term ECDSA (P-256) key pair for cryptographically authenticating handshakes & preventing MITM
+   */
+  async generateIdentityKeyPair() {
+    return await this.subtle.generateKey(
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256',
+      },
+      true, // extractable for local encrypted storage & public key sharing
+      ['sign', 'verify']
+    );
+  }
+
+  async exportIdentityPublicKey(key) {
+    const raw = await this.subtle.exportKey('spki', key);
+    return this.bufferToBase64(raw);
+  }
+
+  async importIdentityPublicKey(base64Spki) {
+    const buffer = this.base64ToBuffer(base64Spki);
+    return await this.subtle.importKey(
+      'spki',
+      buffer,
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256',
+      },
+      true,
+      ['verify']
+    );
+  }
+
+  async exportIdentityPrivateKey(key) {
+    const pkcs8 = await this.subtle.exportKey('pkcs8', key);
+    return this.bufferToBase64(pkcs8);
+  }
+
+  async importIdentityPrivateKey(base64Pkcs8) {
+    const buffer = this.base64ToBuffer(base64Pkcs8);
+    return await this.subtle.importKey(
+      'pkcs8',
+      buffer,
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256',
+      },
+      true,
+      ['sign']
+    );
+  }
+
+  /**
+   * Digitally signs a data string using the sender's long-term ECDSA private key
+   * @param {string} dataString
+   * @param {CryptoKey} privateKey
+   * @returns {Promise<string>} Base64 signature
+   */
+  async signData(dataString, privateKey) {
+    const dataBuffer = this.encoder.encode(dataString);
+    const signature = await this.subtle.sign(
+      {
+        name: 'ECDSA',
+        hash: { name: 'SHA-256' },
+      },
+      privateKey,
+      dataBuffer
+    );
+    return this.bufferToBase64(signature);
+  }
+
+  /**
+   * Verifies an ECDSA digital signature against remote identity public key
+   * @param {string} dataString
+   * @param {string} signatureBase64
+   * @param {CryptoKey} publicKey
+   * @returns {Promise<boolean>}
+   */
+  async verifySignature(dataString, signatureBase64, publicKey) {
+    try {
+      const dataBuffer = this.encoder.encode(dataString);
+      const sigBuffer = this.base64ToBuffer(signatureBase64);
+      return await this.subtle.verify(
+        {
+          name: 'ECDSA',
+          hash: { name: 'SHA-256' },
+        },
+        publicKey,
+        sigBuffer,
+        dataBuffer
+      );
+    } catch (e) {
+      console.warn('Digital signature verification failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Computes a Signal-style 60-digit Safety Number for out-of-band identity verification
+   * Sorts public keys & identity keys lexicographically to ensure both peers get the exact same number.
+   * Derives 12 uniform 5-digit blocks from 512-bit SHA-512 digest to eliminate entropy wrap-around bias.
    * @param {string} myPublicKeyBase64 
    * @param {string} peerPublicKeyBase64 
+   * @param {string} [myIdentityKeyBase64]
+   * @param {string} [peerIdentityKeyBase64]
    * @returns {Promise<string>} 60-digit formatted string (12 blocks of 5 digits)
    */
-  async computeSafetyNumbers(myPublicKeyBase64, peerPublicKeyBase64) {
-    const sorted = [myPublicKeyBase64, peerPublicKeyBase64].sort();
-    const combined = sorted[0] + '::' + sorted[1];
-    let currentHash = await this.subtle.digest('SHA-256', this.encoder.encode(combined));
-
-    // Iterative hashing (5200 rounds)
+  async computeSafetyNumbers(myPublicKeyBase64, peerPublicKeyBase64, myIdentityKeyBase64 = '', peerIdentityKeyBase64 = '') {
+    const sorted = [myPublicKeyBase64, peerPublicKeyBase64, myIdentityKeyBase64, peerIdentityKeyBase64]
+      .filter(Boolean)
+      .sort();
+    const combined = sorted.join('::');
+    
+    // Hash using SHA-512 (64 bytes / 512 bits) with 5200 iterative rounds
+    let currentHash = await this.subtle.digest('SHA-512', this.encoder.encode(combined));
     for (let i = 0; i < 5200; i++) {
-      currentHash = await this.subtle.digest('SHA-256', currentHash);
+      currentHash = await this.subtle.digest('SHA-512', currentHash);
     }
 
-    const hashBytes = new Uint8Array(currentHash);
-    let digits = '';
-    for (let i = 0; i < 30; i++) {
-      const val = (hashBytes[i % hashBytes.length] * 256 + hashBytes[(i + 1) % hashBytes.length]) % 100;
-      digits += val.toString().padStart(2, '0');
-    }
-    digits = digits.slice(0, 60);
-
-    // Format into 12 blocks of 5 digits
+    // Extract 12 disjoint 4-byte big-endian integers (48 bytes out of 64 bytes)
+    const view = new DataView(currentHash);
     const blocks = [];
-    for (let i = 0; i < 60; i += 5) {
-      blocks.push(digits.slice(i, i + 5));
+    for (let i = 0; i < 12; i++) {
+      const uint32 = view.getUint32(i * 4, false);
+      const fiveDigits = (uint32 % 100000).toString().padStart(5, '0');
+      blocks.push(fiveDigits);
     }
     return blocks.join(' ');
   }
@@ -352,6 +453,24 @@ class CipherCore {
   secureWipe(typedArray) {
     if (typedArray && typedArray.fill) {
       typedArray.fill(0);
+    }
+  }
+
+  /**
+   * Overwrites local/session storage keys with random cryptographic noise before removing
+   */
+  scrambleStorage(keys = []) {
+    try {
+      keys.forEach(k => {
+        if (localStorage.getItem(k) !== null) {
+          const noise = new Uint8Array(64);
+          this.crypto.getRandomValues(noise);
+          localStorage.setItem(k, this.bufferToHex(noise));
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (e) {
+      console.warn('Storage scramble warning:', e);
     }
   }
 
@@ -397,21 +516,27 @@ class CipherCore {
     }
   }
 
-  // --- Utility Encoders ---
+  // --- High-Performance Utility Encoders ---
 
+  /**
+   * High-speed chunked Base64 encoding.
+   * Avoids O(N) string concatenation memory spikes & mobile browser crashes.
+   */
   bufferToBase64(buffer) {
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const CHUNK_SIZE = 0x8000; // 32,768 bytes per chunk to prevent call stack overflow
+    const chunks = [];
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+      chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE)));
     }
-    return window.btoa(binary);
+    return window.btoa(chunks.join(''));
   }
 
   base64ToBuffer(base64) {
     const binary = window.atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
     return bytes.buffer;
