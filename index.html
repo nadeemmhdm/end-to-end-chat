@@ -431,18 +431,40 @@
           <div class="chat-input-area">
             <div class="typing-indicator-bar" id="typing-indicator"></div>
 
-            <!-- Quick Emoji Bar -->
-            <div class="quick-emoji-bar">
-              <span style="font-size:0.7rem; color:var(--text-subtle); margin-right:0.2rem;">Quick:</span>
-              <button type="button" class="emoji-btn">😀</button>
-              <button type="button" class="emoji-btn">👍</button>
-              <button type="button" class="emoji-btn">🔒</button>
-              <button type="button" class="emoji-btn">🛡️</button>
-              <button type="button" class="emoji-btn">🔥</button>
-              <button type="button" class="emoji-btn">⚡</button>
-              <button type="button" class="emoji-btn">👋</button>
-              <button type="button" class="emoji-btn">❤️</button>
-              <button type="button" class="emoji-btn">🚀</button>
+            <!-- Complete Comprehensive Emoji Picker Popover -->
+            <div class="emoji-picker-popover" id="emoji-picker-popover" style="display: none;">
+              <div class="emoji-picker-header">
+                <div class="emoji-search-box">
+                  <i class='bx bx-search'></i>
+                  <input type="text" id="emoji-search-input" placeholder="Search emojis..." autocomplete="off">
+                  <button type="button" id="btn-clear-emoji-search" style="display:none;"><i class='bx bx-x'></i></button>
+                </div>
+                <button type="button" class="btn-close-emoji" id="btn-close-emoji-picker" title="Close"><i class='bx bx-x'></i></button>
+              </div>
+
+              <!-- Category Navigation Tabs -->
+              <div class="emoji-category-tabs" id="emoji-category-tabs">
+                <button type="button" class="emoji-tab-btn active" data-cat="all" title="All Emojis">✨</button>
+                <button type="button" class="emoji-tab-btn" data-cat="smileys" title="Smileys & Emotion">😃</button>
+                <button type="button" class="emoji-tab-btn" data-cat="gestures" title="People & Gestures">👋</button>
+                <button type="button" class="emoji-tab-btn" data-cat="nature" title="Animals & Nature">🐱</button>
+                <button type="button" class="emoji-tab-btn" data-cat="food" title="Food & Drink">🍔</button>
+                <button type="button" class="emoji-tab-btn" data-cat="travel" title="Travel & Places">🚀</button>
+                <button type="button" class="emoji-tab-btn" data-cat="objects" title="Objects & Tech">💡</button>
+                <button type="button" class="emoji-tab-btn" data-cat="symbols" title="Symbols & Security">🔒</button>
+                <button type="button" class="emoji-tab-btn" data-cat="flags" title="Flags">🚩</button>
+              </div>
+
+              <!-- Scrollable Emoji Grid -->
+              <div class="emoji-grid-container" id="emoji-grid-container">
+                <!-- Dynamically rendered -->
+              </div>
+
+              <!-- Footer with emoji count and active hover preview -->
+              <div class="emoji-picker-footer">
+                <span id="emoji-preview-text">Click to insert emoji</span>
+                <span id="emoji-count-badge" style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-subtle);">280+ Emojis</span>
+              </div>
             </div>
 
             <div class="input-controls-row">
@@ -453,6 +475,11 @@
 
               <button class="btn btn-icon" id="btn-record-voice" title="Record Encrypted Voice Note">
                 <i class='bx bx-microphone'></i>
+              </button>
+
+              <!-- Emoji Picker Toggle Button -->
+              <button class="btn btn-icon" id="btn-toggle-emoji-picker" title="Open Complete Emoji Picker">
+                <i class='bx bx-smile'></i>
               </button>
 
               <div class="recording-bar" id="recording-bar" style="display: none;">

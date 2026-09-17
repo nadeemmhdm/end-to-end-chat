@@ -203,6 +203,45 @@ class CipherCore {
   }
 
   /**
+   * Generates an ephemeral 256-bit AES-GCM symmetric key for media/file envelope encryption
+   */
+  async generateSymmetricKey() {
+    return await this.subtle.generateKey(
+      {
+        name: 'AES-GCM',
+        length: 256,
+      },
+      true, // extractable so it can be encrypted for recipients
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
+   * Exports an AES-GCM key to base64 string
+   */
+  async exportSymmetricKey(key) {
+    const raw = await this.subtle.exportKey('raw', key);
+    return this.bufferToBase64(raw);
+  }
+
+  /**
+   * Imports a raw AES-GCM key from base64 string
+   */
+  async importSymmetricKey(base64Key) {
+    const buffer = this.base64ToBuffer(base64Key);
+    return await this.subtle.importKey(
+      'raw',
+      buffer,
+      {
+        name: 'AES-GCM',
+        length: 256,
+      },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
    * Encrypts plaintext data using AES-GCM 256-bit with fresh 12-byte (96-bit) IV
    * @param {string|Uint8Array} data - Plaintext string or binary buffer
    * @param {CryptoKey} key - 256-bit AES-GCM key

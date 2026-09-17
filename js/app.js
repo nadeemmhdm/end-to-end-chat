@@ -159,6 +159,16 @@ class CipherApp {
     this.imageLightbox = document.getElementById('image-lightbox');
     this.lightboxImg = document.getElementById('lightbox-img');
     this.btnCloseLightbox = document.getElementById('btn-close-lightbox');
+
+    // Emoji Picker Elements
+    this.btnToggleEmojiPicker = document.getElementById('btn-toggle-emoji-picker');
+    this.emojiPickerPopover = document.getElementById('emoji-picker-popover');
+    this.emojiSearchInput = document.getElementById('emoji-search-input');
+    this.btnClearEmojiSearch = document.getElementById('btn-clear-emoji-search');
+    this.btnCloseEmojiPicker = document.getElementById('btn-close-emoji-picker');
+    this.emojiGridContainer = document.getElementById('emoji-grid-container');
+    this.emojiCategoryTabs = document.getElementById('emoji-category-tabs');
+    this.emojiPreviewText = document.getElementById('emoji-preview-text');
   }
 
   // ============================================================================
@@ -661,15 +671,8 @@ class CipherApp {
       });
     }
 
-    // Quick Emoji Bar clicks
-    document.querySelectorAll('.emoji-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (this.chatInput) {
-          this.chatInput.value += btn.textContent;
-          this.chatInput.focus();
-        }
-      });
-    });
+    // Initialize Comprehensive Emoji Picker
+    this.initEmojiPicker();
 
     // Reset / Wipe Account Button
     if (this.btnResetAccount) {
@@ -1267,7 +1270,629 @@ class CipherApp {
   }
 
   // ============================================================================
-  // FILE & IMAGE SHARING WITH INLINE PREVIEWS
+  // COMPREHENSIVE CATEGORIZED EMOJI PICKER WITH SEARCH (280+ UNICODE EMOJIS)
+  // ============================================================================
+  initEmojiPicker() {
+    if (!this.emojiPickerPopover || !this.emojiGridContainer) return;
+
+    this.allEmojis = [
+      // Smileys & Emotion
+      { e: '😀', n: 'grinning face', c: 'smileys', k: 'smile happy joy grin' },
+      { e: '😃', n: 'grinning face big eyes', c: 'smileys', k: 'smile happy' },
+      { e: '😄', n: 'grinning face smiling eyes', c: 'smileys', k: 'happy laugh' },
+      { e: '😁', n: 'beaming face', c: 'smileys', k: 'grin proud teeth' },
+      { e: '😆', n: 'grinning squinting', c: 'smileys', k: 'haha laugh lol' },
+      { e: '😅', n: 'grinning sweat', c: 'smileys', k: 'relief phew sweat' },
+      { e: '🤣', n: 'rolling on the floor laughing', c: 'smileys', k: 'rofl lol laugh' },
+      { e: '😂', n: 'face with tears of joy', c: 'smileys', k: 'cry laugh happy' },
+      { e: '🙂', n: 'slightly smiling face', c: 'smileys', k: 'smile ok' },
+      { e: '🙃', n: 'upside down face', c: 'smileys', k: 'sarcasm silly' },
+      { e: '😉', n: 'winking face', c: 'smileys', k: 'wink flirt' },
+      { e: '😊', n: 'smiling face with smiling eyes', c: 'smileys', k: 'blush smile' },
+      { e: '😇', n: 'smiling face with halo', c: 'smileys', k: 'angel innocent' },
+      { e: '🥰', n: 'smiling face with hearts', c: 'smileys', k: 'love adore hearts' },
+      { e: '😍', n: 'heart eyes', c: 'smileys', k: 'love crush adore' },
+      { e: '🤩', n: 'star struck', c: 'smileys', k: 'star wow excited' },
+      { e: '😘', n: 'face blowing a kiss', c: 'smileys', k: 'kiss love' },
+      { e: '😗', n: 'kissing face', c: 'smileys', k: 'kiss' },
+      { e: '😚', n: 'kissing face with closed eyes', c: 'smileys', k: 'kiss romance' },
+      { e: '😋', n: 'face savoring food', c: 'smileys', k: 'yum delicious tongue' },
+      { e: '😛', n: 'face with tongue', c: 'smileys', k: 'tongue silly' },
+      { e: '😜', n: 'winking face with tongue', c: 'smileys', k: 'joke party silly' },
+      { e: '🤪', n: 'zany face', c: 'smileys', k: 'crazy wild goofy' },
+      { e: '😝', n: 'squinting face with tongue', c: 'smileys', k: 'tongue lol' },
+      { e: '🤑', n: 'money mouth face', c: 'smileys', k: 'rich dollar cash' },
+      { e: '🤗', n: 'hugging face', c: 'smileys', k: 'hug embrace warm' },
+      { e: '🤭', n: 'face with hand over mouth', c: 'smileys', k: 'oops giggle quiet' },
+      { e: '🤫', n: 'shushing face', c: 'smileys', k: 'quiet secret hush' },
+      { e: '🤔', n: 'thinking face', c: 'smileys', k: 'think ponder consider' },
+      { e: '🤐', n: 'zipper mouth face', c: 'smileys', k: 'silent zip secret' },
+      { e: '🤨', n: 'face with raised eyebrow', c: 'smileys', k: 'skeptical distrust' },
+      { e: '😐', n: 'neutral face', c: 'smileys', k: 'meh poker straight' },
+      { e: '😑', n: 'expressionless face', c: 'smileys', k: 'blank no expression' },
+      { e: '😶', n: 'face without mouth', c: 'smileys', k: 'speechless mute' },
+      { e: '😏', n: 'smirking face', c: 'smileys', k: 'smirk flirt sly' },
+      { e: '😒', n: 'unamused face', c: 'smileys', k: 'bored unimpressed' },
+      { e: '🙄', n: 'face with rolling eyes', c: 'smileys', k: 'eye roll annoying' },
+      { e: '😬', n: 'grimacing face', c: 'smileys', k: 'awkward eek nervous' },
+      { e: '🤥', n: 'lying face', c: 'smileys', k: 'pinocchio lie fake' },
+      { e: '😌', n: 'relieved face', c: 'smileys', k: 'peace calm zen' },
+      { e: '😔', n: 'pensive face', c: 'smileys', k: 'sad down sorrow' },
+      { e: '😪', n: 'sleepy face', c: 'smileys', k: 'tired snot sleep' },
+      { e: '🤤', n: 'drooling face', c: 'smileys', k: 'drool hungry crave' },
+      { e: '😴', n: 'sleeping face', c: 'smileys', k: 'zzz bedtime sleep' },
+      { e: '😷', n: 'face with medical mask', c: 'smileys', k: 'sick virus mask' },
+      { e: '🤒', n: 'face with thermometer', c: 'smileys', k: 'fever ill sick' },
+      { e: '🤕', n: 'face with head bandage', c: 'smileys', k: 'hurt injury' },
+      { e: '🤢', n: 'nauseated face', c: 'smileys', k: 'green vomit gross' },
+      { e: '🤮', n: 'face vomiting', c: 'smileys', k: 'puke barf ill' },
+      { e: '🤧', n: 'sneezing face', c: 'smileys', k: 'achoo cold flu' },
+      { e: '🥵', n: 'hot face', c: 'smileys', k: 'summer heat sweat' },
+      { e: '🥶', n: 'cold face', c: 'smileys', k: 'freezing winter ice' },
+      { e: '🥴', n: 'woozy face', c: 'smileys', k: 'dizzy drunk tipsy' },
+      { e: '😵', n: 'dizzy face', c: 'smileys', k: 'passed out knocked' },
+      { e: '🤯', n: 'exploding head', c: 'smileys', k: 'mind blown shock' },
+      { e: '🤠', n: 'cowboy hat face', c: 'smileys', k: 'wild west yeehaw' },
+      { e: '🥳', n: 'partying face', c: 'smileys', k: 'celebrate birthday fun' },
+      { e: '🥸', n: 'disguised face', c: 'smileys', k: 'spy incognito disguise' },
+      { e: '😎', n: 'smiling face with sunglasses', c: 'smileys', k: 'cool chill hacker' },
+      { e: '🤓', n: 'nerd face', c: 'smileys', k: 'geek smart glasses' },
+      { e: '🧐', n: 'face with monocle', c: 'smileys', k: 'curious inspect posh' },
+      { e: '😕', n: 'confused face', c: 'smileys', k: 'puzzled unsure' },
+      { e: '😟', n: 'worried face', c: 'smileys', k: 'anxious stress' },
+      { e: '🙁', n: 'slightly frowning face', c: 'smileys', k: 'disappointed' },
+      { e: '😮', n: 'face with open mouth', c: 'smileys', k: 'surprise whoa' },
+      { e: '😯', n: 'hushed face', c: 'smileys', k: 'stunned gasp' },
+      { e: '😲', n: 'astonished face', c: 'smileys', k: 'omg shocked' },
+      { e: '😳', n: 'flushed face', c: 'smileys', k: 'blush red embarrassment' },
+      { e: '🥺', n: 'pleading face', c: 'smileys', k: 'puppy eyes please' },
+      { e: '😦', n: 'frowning face with open mouth', c: 'smileys', k: 'alarmed' },
+      { e: '😧', n: 'anguished face', c: 'smileys', k: 'pain hurt' },
+      { e: '😨', n: 'fearful face', c: 'smileys', k: 'scared terrified' },
+      { e: '😰', n: 'anxious face with sweat', c: 'smileys', k: 'nervous panic' },
+      { e: '😥', n: 'sad but relieved face', c: 'smileys', k: 'whew sweat' },
+      { e: '😢', n: 'crying face', c: 'smileys', k: 'tear weep sad' },
+      { e: '😭', n: 'loudly crying face', c: 'smileys', k: 'bawling sob despair' },
+      { e: '😱', n: 'face screaming in fear', c: 'smileys', k: 'horror scream munch' },
+      { e: '😖', n: 'confounded face', c: 'smileys', k: 'struggle upset' },
+      { e: '😣', n: 'persevering face', c: 'smileys', k: 'endure tough' },
+      { e: '😞', n: 'disappointed face', c: 'smileys', k: 'bummed sad' },
+      { e: '😓', n: 'downcast face with sweat', c: 'smileys', k: 'hard work stress' },
+      { e: '😩', n: 'weary face', c: 'smileys', k: 'tired give up' },
+      { e: '😫', n: 'tired face', c: 'smileys', k: 'exhausted overwhelmed' },
+      { e: '🥱', n: 'yawning face', c: 'smileys', k: 'sleepy bored' },
+      { e: '😤', n: 'face with steam from nose', c: 'smileys', k: 'triumph huff anger' },
+      { e: '😡', n: 'pouting face', c: 'smileys', k: 'furious mad rage' },
+      { e: '😠', n: 'angry face', c: 'smileys', k: 'mad grr cross' },
+      { e: '🤬', n: 'face with symbols on mouth', c: 'smileys', k: 'swearing cuss anger' },
+      { e: '😈', n: 'smiling face with horns', c: 'smileys', k: 'devil mischievous evil' },
+      { e: '👿', n: 'angry face with horns', c: 'smileys', k: 'demon furious' },
+      { e: '💀', n: 'skull', c: 'smileys', k: 'dead skeleton death' },
+      { e: '☠️', n: 'skull and crossbones', c: 'smileys', k: 'danger poison pirate' },
+      { e: '💩', n: 'pile of poo', c: 'smileys', k: 'poop crap stinky' },
+      { e: '🤡', n: 'clown face', c: 'smileys', k: 'circus joker funny' },
+      { e: '👹', n: 'ogre', c: 'smileys', k: 'monster japanese' },
+      { e: '👺', n: 'goblin', c: 'smileys', k: 'red nose troll' },
+      { e: '👻', n: 'ghost', c: 'smileys', k: 'spooky halloween spirit' },
+      { e: '👽', n: 'alien', c: 'smileys', k: 'ufo et extra extraterrestrial' },
+      { e: '👾', n: 'alien monster', c: 'smileys', k: '8bit retro arcade game' },
+      { e: '🤖', n: 'robot', c: 'smileys', k: 'bot ai android tech' },
+      { e: '😺', n: 'grinning cat', c: 'smileys', k: 'kitten pet feline' },
+      { e: '😻', n: 'heart eyes cat', c: 'smileys', k: 'cat love adore' },
+      { e: '😹', n: 'cat tears of joy', c: 'smileys', k: 'laughing cat' },
+      { e: '💋', n: 'kiss mark', c: 'smileys', k: 'lips lipstick romance' },
+      { e: '💌', n: 'love letter', c: 'smileys', k: 'heart envelope mail' },
+      { e: '💘', n: 'heart with arrow', c: 'smileys', k: 'cupid falling in love' },
+      { e: '💝', n: 'heart with ribbon', c: 'smileys', k: 'gift present romance' },
+      { e: '💖', n: 'sparkling heart', c: 'smileys', k: 'glitter love shiny' },
+      { e: '💗', n: 'growing heart', c: 'smileys', k: 'pulse expanding love' },
+      { e: '💓', n: 'beating heart', c: 'smileys', k: 'thump alive heartbeat' },
+      { e: '💞', n: 'revolving hearts', c: 'smileys', k: 'affection twirl' },
+      { e: '💕', n: 'two hearts', c: 'smileys', k: 'sweet couple bond' },
+      { e: '❣️', n: 'heart exclamation', c: 'smileys', k: 'point heavy heart' },
+      { e: '💔', n: 'broken heart', c: 'smileys', k: 'heartbreak breakup sad' },
+      { e: '❤️', n: 'red heart', c: 'smileys', k: 'love passion pure' },
+      { e: '🧡', n: 'orange heart', c: 'smileys', k: 'warmth friend' },
+      { e: '💛', n: 'yellow heart', c: 'smileys', k: 'friendship gold' },
+      { e: '💚', n: 'green heart', c: 'smileys', k: 'nature health eco' },
+      { e: '💙', n: 'blue heart', c: 'smileys', k: 'loyalty trust calm' },
+      { e: '💜', n: 'purple heart', c: 'smileys', k: 'magic royal' },
+      { e: '🤎', n: 'brown heart', c: 'smileys', k: 'chocolate coffee earth' },
+      { e: '🖤', n: 'black heart', c: 'smileys', k: 'dark gothic chic' },
+      { e: '🤍', n: 'white heart', c: 'smileys', k: 'peace pure angel' },
+      { e: '💯', n: 'hundred points', c: 'smileys', k: '100 perfect exam score' },
+      { e: '💢', n: 'anger symbol', c: 'smileys', k: 'vein mad anime' },
+      { e: '💥', n: 'collision', c: 'smileys', k: 'boom bang explode' },
+      { e: '💫', n: 'dizzy', c: 'smileys', k: 'stars orbit galaxy' },
+      { e: '💦', n: 'sweat droplets', c: 'smileys', k: 'water splash drip' },
+      { e: '💨', n: 'dashing away', c: 'smileys', k: 'fast run wind speed' },
+      { e: '🔥', n: 'fire', c: 'smileys', k: 'lit flame hot lit trending' },
+      { e: '✨', n: 'sparkles', c: 'smileys', k: 'magic clean shiny star' },
+      { e: '💬', n: 'speech balloon', c: 'smileys', k: 'chat message talk comment' },
+      { e: '💭', n: 'thought balloon', c: 'smileys', k: 'think idea dream' },
+
+      // People & Gestures
+      { e: '👋', n: 'waving hand', c: 'gestures', k: 'wave hello goodbye hi' },
+      { e: '🤚', n: 'raised back of hand', c: 'gestures', k: 'backhand stop' },
+      { e: '🖐️', n: 'hand with fingers splayed', c: 'gestures', k: 'five palm' },
+      { e: '✋', n: 'raised hand', c: 'gestures', k: 'high five stop question' },
+      { e: '🖖', n: 'vulcan salute', c: 'gestures', k: 'spock live long trek' },
+      { e: '👌', n: 'ok hand', c: 'gestures', k: 'perfect good fine' },
+      { e: '🤌', n: 'pinched fingers', c: 'gestures', k: 'italian gesture what' },
+      { e: '🤏', n: 'pinching hand', c: 'gestures', k: 'small tiny bit' },
+      { e: '✌️', n: 'victory hand', c: 'gestures', k: 'peace two v win' },
+      { e: '🤞', n: 'crossed fingers', c: 'gestures', k: 'luck hope wish' },
+      { e: '🤟', n: 'love you gesture', c: 'gestures', k: 'ily sign language' },
+      { e: '🤘', n: 'sign of the horns', c: 'gestures', k: 'rock metal concert' },
+      { e: '🤙', n: 'call me hand', c: 'gestures', k: 'shaka phone surf' },
+      { e: '👈', n: 'backhand index pointing left', c: 'gestures', k: 'point left' },
+      { e: '👉', n: 'backhand index pointing right', c: 'gestures', k: 'point right' },
+      { e: '👆', n: 'backhand index pointing up', c: 'gestures', k: 'point up' },
+      { e: '🖕', n: 'middle finger', c: 'gestures', k: 'rude finger rebel' },
+      { e: '👇', n: 'backhand index pointing down', c: 'gestures', k: 'point down' },
+      { e: '☝️', n: 'index pointing up', c: 'gestures', k: 'one number attention' },
+      { e: '👍', n: 'thumbs up', c: 'gestures', k: 'like agree approve yes' },
+      { e: '👎', n: 'thumbs down', c: 'gestures', k: 'dislike bad no reject' },
+      { e: '✊', n: 'raised fist', c: 'gestures', k: 'power solidarity punch' },
+      { e: '👊', n: 'oncoming fist', c: 'gestures', k: 'brofist punch bump' },
+      { e: '🤛', n: 'left facing fist', c: 'gestures', k: 'fist bump left' },
+      { e: '🤜', n: 'right facing fist', c: 'gestures', k: 'fist bump right' },
+      { e: '👏', n: 'clapping hands', c: 'gestures', k: 'applause bravo praise' },
+      { e: '🙌', n: 'raising hands', c: 'gestures', k: 'celebration hooray cheer' },
+      { e: '👐', n: 'open hands', c: 'gestures', k: 'welcome open warm' },
+      { e: '🤲', n: 'palms up together', c: 'gestures', k: 'prayer dua offering' },
+      { e: '🤝', n: 'handshake', c: 'gestures', k: 'deal agreement partner' },
+      { e: '🙏', n: 'folded hands', c: 'gestures', k: 'pray thank you please namaste' },
+      { e: '✍️', n: 'writing hand', c: 'gestures', k: 'write pen author' },
+      { e: '💅', n: 'nail polish', c: 'gestures', k: 'beauty manicure slay' },
+      { e: '🤳', n: 'selfie', c: 'gestures', k: 'camera phone snapshot' },
+      { e: '💪', n: 'flexed biceps', c: 'gestures', k: 'strong muscle power fitness' },
+      { e: '🦾', n: 'mechanical arm', c: 'gestures', k: 'prosthetic cyber robot' },
+      { e: '👀', n: 'eyes', c: 'gestures', k: 'look see inspect spy watching' },
+      { e: '👁️', n: 'eye', c: 'gestures', k: 'vision observe privacy' },
+      { e: '🧠', n: 'brain', c: 'gestures', k: 'smart intelligence mind idea' },
+
+      // Animals & Nature
+      { e: '🐶', n: 'dog face', c: 'nature', k: 'puppy canine pet' },
+      { e: '🐱', n: 'cat face', c: 'nature', k: 'kitty feline pet' },
+      { e: '🐭', n: 'mouse face', c: 'nature', k: 'rodent cheese' },
+      { e: '🐹', n: 'hamster', c: 'nature', k: 'pet cute cheeks' },
+      { e: '🐰', n: 'rabbit face', c: 'nature', k: 'bunny easter cute' },
+      { e: '🦊', n: 'fox', c: 'nature', k: 'clever wild animal' },
+      { e: '🐻', n: 'bear', c: 'nature', k: 'grizzly wild animal' },
+      { e: '🐼', n: 'panda', c: 'nature', k: 'bamboo cute bear' },
+      { e: '🐨', n: 'koala', c: 'nature', k: 'australia eucalyptus' },
+      { e: '🐯', n: 'tiger face', c: 'nature', k: 'big cat stripes wild' },
+      { e: '🦁', n: 'lion', c: 'nature', k: 'king jungle brave' },
+      { e: '🐮', n: 'cow face', c: 'nature', k: 'dairy milk farm' },
+      { e: '🐷', n: 'pig face', c: 'nature', k: 'farm oink pink' },
+      { e: '🐸', n: 'frog', c: 'nature', k: 'toad amphibian ribbit' },
+      { e: '🐵', n: 'monkey face', c: 'nature', k: 'ape jungle cheeky' },
+      { e: '🙈', n: 'see no evil monkey', c: 'nature', k: 'blind shy hide' },
+      { e: '🙉', n: 'hear no evil monkey', c: 'nature', k: 'deaf loud ignore' },
+      { e: '🙊', n: 'speak no evil monkey', c: 'nature', k: 'quiet hush secret' },
+      { e: '🦅', n: 'eagle', c: 'nature', k: 'bird predator fly freedom' },
+      { e: '🦉', n: 'owl', c: 'nature', k: 'wise bird night nocturne' },
+      { e: '🦇', n: 'bat', c: 'nature', k: 'vampire night cave batman' },
+      { e: '🐺', n: 'wolf', c: 'nature', k: 'howl pack wild moonlight' },
+      { e: '🦄', n: 'unicorn', c: 'nature', k: 'fantasy magic horn horse' },
+      { e: '🐝', n: 'honeybee', c: 'nature', k: 'insect honey sting pollinate' },
+      { e: '🐛', n: 'bug', c: 'nature', k: 'insect caterpillar code' },
+      { e: '🦋', n: 'butterfly', c: 'nature', k: 'pretty wings insect' },
+      { e: '🐌', n: 'snail', c: 'nature', k: 'slow shell garden' },
+      { e: '🐞', n: 'lady beetle', c: 'nature', k: 'ladybug spotted insect' },
+      { e: '🕷️', n: 'spider', c: 'nature', k: 'web arachnid eight legs' },
+      { e: '🦂', n: 'scorpion', c: 'nature', k: 'desert sting venom' },
+      { e: '🐢', n: 'turtle', c: 'nature', k: 'slow reptile shell ocean' },
+      { e: '🐍', n: 'snake', c: 'nature', k: 'python reptile venom serpent' },
+      { e: '🐙', n: 'octopus', c: 'nature', k: 'sea tentacles ocean' },
+      { e: '🐬', n: 'dolphin', c: 'nature', k: 'marine smart swim' },
+      { e: '🐳', n: 'spouting whale', c: 'nature', k: 'huge sea mammal ocean' },
+      { e: '🦈', n: 'shark', c: 'nature', k: 'predator jaws ocean' },
+      { e: '🌲', n: 'evergreen tree', c: 'nature', k: 'pine forest wood' },
+      { e: '🌳', n: 'deciduous tree', c: 'nature', k: 'park green leaves' },
+      { e: '🌴', n: 'palm tree', c: 'nature', k: 'beach tropical oasis' },
+      { e: '🌵', n: 'cactus', c: 'nature', k: 'desert spikes succulent' },
+      { e: '🌿', n: 'herb', c: 'nature', k: 'leaf plant eco green' },
+      { e: '🍀', n: 'four leaf clover', c: 'nature', k: 'lucky irish fortune' },
+      { e: '🌹', n: 'rose', c: 'nature', k: 'flower red romantic love' },
+      { e: '🌻', n: 'sunflower', c: 'nature', k: 'flower yellow sun field' },
+      { e: '🌺', n: 'hibiscus', c: 'nature', k: 'flower tropical pink' },
+      { e: '🌸', n: 'cherry blossom', c: 'nature', k: 'sakura spring japan' },
+      { e: '🍄', n: 'mushroom', c: 'nature', k: 'fungus toadstool forest' },
+      { e: '🌞', n: 'sun with face', c: 'nature', k: 'summer bright morning' },
+      { e: '🌙', n: 'crescent moon', c: 'nature', k: 'night dark sky' },
+      { e: '⭐', n: 'star', c: 'nature', k: 'night sky bright rating' },
+      { e: '⚡', n: 'high voltage', c: 'nature', k: 'lightning zap power speed' },
+      { e: '🌈', n: 'rainbow', c: 'nature', k: 'colors sky pride weather' },
+      { e: '☁️', n: 'cloud', c: 'nature', k: 'weather overcast sky' },
+      { e: '🌧️', n: 'cloud with rain', c: 'nature', k: 'rainy weather storm' },
+      { e: '❄️', n: 'snowflake', c: 'nature', k: 'winter cold snow ice' },
+      { e: '🌊', n: 'water wave', c: 'nature', k: 'sea ocean surf tsunami' },
+
+      // Food & Drink
+      { e: '🍏', n: 'green apple', c: 'food', k: 'fruit fresh healthy' },
+      { e: '🍎', n: 'red apple', c: 'food', k: 'fruit teacher sweet' },
+      { e: '🍐', n: 'pear', c: 'food', k: 'fruit juicy sweet' },
+      { e: '🍊', n: 'tangerine', c: 'food', k: 'orange citrus vitamin' },
+      { e: '🍋', n: 'lemon', c: 'food', k: 'sour citrus yellow' },
+      { e: '🍌', n: 'banana', c: 'food', k: 'fruit peel yellow potassium' },
+      { e: '🍉', n: 'watermelon', c: 'food', k: 'summer fruit slice juicy' },
+      { e: '🍇', n: 'grapes', c: 'food', k: 'fruit wine bunch purple' },
+      { e: '🍓', n: 'strawberry', c: 'food', k: 'fruit berry sweet red' },
+      { e: '🫐', n: 'blueberries', c: 'food', k: 'fruit berry healthy' },
+      { e: '🍒', n: 'cherries', c: 'food', k: 'fruit sweet pair red' },
+      { e: '🍑', n: 'peach', c: 'food', k: 'fruit sweet booty fuzzy' },
+      { e: '🥭', n: 'mango', c: 'food', k: 'tropical fruit sweet juicy' },
+      { e: '🍍', n: 'pineapple', c: 'food', k: 'tropical fruit hawaii' },
+      { e: '🥑', n: 'avocado', c: 'food', k: 'guacamole toast green healthy' },
+      { e: '🍔', n: 'hamburger', c: 'food', k: 'burger beef fast food diner' },
+      { e: '🍟', n: 'french fries', c: 'food', k: 'chips potato fast food' },
+      { e: '🍕', n: 'pizza', c: 'food', k: 'slice cheese pepperoni italian' },
+      { e: '🌭', n: 'hot dog', c: 'food', k: 'sausage mustard bun frank' },
+      { e: '🥪', n: 'sandwich', c: 'food', k: 'bread lunch sub deli' },
+      { e: '🌮', n: 'taco', c: 'food', k: 'mexican shell salsa food' },
+      { e: '🌯', n: 'burrito', c: 'food', k: 'wrap mexican beans rice' },
+      { e: '🥗', n: 'green salad', c: 'food', k: 'healthy diet vegetables' },
+      { e: '🍝', n: 'spaghetti', c: 'food', k: 'pasta noodles italian sauce' },
+      { e: '🍜', n: 'steaming bowl', c: 'food', k: 'ramen noodles soup asian' },
+      { e: '🍣', n: 'sushi', c: 'food', k: 'japanese fish rice roll sashimi' },
+      { e: '🥟', n: 'dumpling', c: 'food', k: 'gyoza potsticker dim sum' },
+      { e: '🍦', n: 'soft ice cream', c: 'food', k: 'vanilla dessert sweet cone' },
+      { e: '🍰', n: 'shortcake', c: 'food', k: 'cake birthday dessert slice' },
+      { e: '🎂', n: 'birthday cake', c: 'food', k: 'celebration candle party' },
+      { e: '🍩', n: 'doughnut', c: 'food', k: 'donut sprinkles glaze sweet' },
+      { e: '🍪', n: 'cookie', c: 'food', k: 'chocolate chip sweet snack' },
+      { e: '🍫', n: 'chocolate bar', c: 'food', k: 'cocoa dessert treat' },
+      { e: '🍿', n: 'popcorn', c: 'food', k: 'movie cinema snack butter' },
+      { e: '☕', n: 'hot beverage', c: 'food', k: 'coffee tea cup caffeine' },
+      { e: '🧃', n: 'beverage box', c: 'food', k: 'juice box straw kid' },
+      { e: '🥤', n: 'cup with straw', c: 'food', k: 'soda drink cup cola' },
+      { e: '🧋', n: 'bubble tea', c: 'food', k: 'boba milk tea tapioca' },
+      { e: '🍺', n: 'beer mug', c: 'food', k: 'alcohol pub drink foam' },
+      { e: '🍻', n: 'clinking beer mugs', c: 'food', k: 'cheers toast party drink' },
+      { e: '🥂', n: 'clinking glasses', c: 'food', k: 'celebrate champagne toast' },
+      { e: '🍷', n: 'wine glass', c: 'food', k: 'red wine alcoholic beverage' },
+      { e: '🍸', n: 'cocktail glass', c: 'food', k: 'martini olive bar drink' },
+
+      // Travel & Places
+      { e: '🚀', n: 'rocket', c: 'travel', k: 'spacecraft launch blast off speed' },
+      { e: '🛸', n: 'flying saucer', c: 'travel', k: 'ufo alien space spaceship' },
+      { e: '🛰️', n: 'satellite', c: 'travel', k: 'orbit space communication gps' },
+      { e: '✈️', n: 'airplane', c: 'travel', k: 'flight travel airport vacation' },
+      { e: '🚗', n: 'automobile', c: 'travel', k: 'car drive vehicle commute' },
+      { e: '🏎️', n: 'racing car', c: 'travel', k: 'f1 speed race fast drift' },
+      { e: '🚓', n: 'police car', c: 'travel', k: 'cop siren patrol law' },
+      { e: '🚑', n: 'ambulance', c: 'travel', k: 'paramedic hospital medical 911' },
+      { e: '🚒', n: 'fire engine', c: 'travel', k: 'fire truck emergency rescue' },
+      { e: '🚲', n: 'bicycle', c: 'travel', k: 'bike cycling ride eco sport' },
+      { e: '🏍️', n: 'motorcycle', c: 'travel', k: 'motorbike ride speed biker' },
+      { e: '🚆', n: 'train', c: 'travel', k: 'railway railway commute travel' },
+      { e: '🚇', n: 'metro', c: 'travel', k: 'subway underground transport' },
+      { e: '🚢', n: 'ship', c: 'travel', k: 'cruise boat sea voyage ocean' },
+      { e: '⚓', n: 'anchor', c: 'travel', k: 'nautical harbor maritime port' },
+      { e: '🚨', n: 'police car light', c: 'travel', k: 'alert siren emergency red' },
+      { e: '🗺️', n: 'world map', c: 'travel', k: 'cartography geography travel' },
+      { e: '🗿', n: 'moai', c: 'travel', k: 'easter island stone statue' },
+      { e: '🗽', n: 'statue of liberty', c: 'travel', k: 'new york america freedom' },
+      { e: '🗼', n: 'tokyo tower', c: 'travel', k: 'japan antenna landmark red' },
+      { e: '🏰', n: 'castle', c: 'travel', k: 'fairytale medieval fortress' },
+      { e: '🏟️', n: 'stadium', c: 'travel', k: 'arena concert sports match' },
+      { e: '🏝️', n: 'desert island', c: 'travel', k: 'beach tropical palm paradise' },
+      { e: '⛰️', n: 'mountain', c: 'travel', k: 'peak hiking nature high' },
+      { e: '🌋', n: 'volcano', c: 'travel', k: 'lava eruption magma mountain' },
+      { e: '🏕️', n: 'camping', c: 'travel', k: 'tent outdoor campfire forest' },
+      { e: '🏠', n: 'house', c: 'travel', k: 'home building living residence' },
+      { e: '🏢', n: 'office building', c: 'travel', k: 'work company corporate skyscraper' },
+      { e: '🌃', n: 'night with stars', c: 'travel', k: 'cityscape evening skyscrapers' },
+      { e: '🌉', n: 'bridge at night', c: 'travel', k: 'golden gate highway suspension' },
+
+      // Objects & Tech
+      { e: '💻', n: 'laptop', c: 'objects', k: 'computer mac pc coding tech hacker' },
+      { e: '🖥️', n: 'desktop computer', c: 'objects', k: 'monitor workstation pc' },
+      { e: '📱', n: 'mobile phone', c: 'objects', k: 'smartphone iphone android call' },
+      { e: '⌨️', n: 'keyboard', c: 'objects', k: 'typing mechanical input' },
+      { e: '🖱️', n: 'computer mouse', c: 'objects', k: 'click cursor pc trackpad' },
+      { e: '💾', n: 'floppy disk', c: 'objects', k: 'save storage retro 3.5' },
+      { e: '💿', n: 'optical disk', c: 'objects', k: 'cd dvd media software' },
+      { e: '📷', n: 'camera', c: 'objects', k: 'photo picture lens capture' },
+      { e: '📹', n: 'video camera', c: 'objects', k: 'record film movie camcorder' },
+      { e: '🎙️', n: 'studio microphone', c: 'objects', k: 'podcast audio recording voice' },
+      { e: '🎧', n: 'headphone', c: 'objects', k: 'music audio listen sound beats' },
+      { e: '📡', n: 'satellite antenna', c: 'objects', k: 'dish signal broadcast wireless' },
+      { e: '🔋', n: 'battery', c: 'objects', k: 'power energy charge full' },
+      { e: '🔌', n: 'electric plug', c: 'objects', k: 'power cord outlet connect' },
+      { e: '💡', n: 'light bulb', c: 'objects', k: 'idea insight bright illuminate' },
+      { e: '🔦', n: 'flashlight', c: 'objects', k: 'torch dark search beam' },
+      { e: '💸', n: 'money with wings', c: 'objects', k: 'cash spend flying rich' },
+      { e: '💵', n: 'dollar banknote', c: 'objects', k: 'money currency usd paper' },
+      { e: '💳', n: 'credit card', c: 'objects', k: 'payment visa debit purchase' },
+      { e: '💎', n: 'gem stone', c: 'objects', k: 'diamond crystal precious luxury' },
+      { e: '⚖️', n: 'balance scale', c: 'objects', k: 'justice law court equal' },
+      { e: '🔧', n: 'wrench', c: 'objects', k: 'tool fix repair settings mechanic' },
+      { e: '🔨', n: 'hammer', c: 'objects', k: 'tool build strike repair' },
+      { e: '⚙️', n: 'gear', c: 'objects', k: 'settings cog wheel machinery' },
+      { e: '💣', n: 'bomb', c: 'objects', k: 'explosive boom danger dynamite' },
+      { e: '🛡️', n: 'shield', c: 'objects', k: 'security defense protection cyber' },
+      { e: '🔑', n: 'key', c: 'objects', k: 'unlock secret access password' },
+      { e: '🗝️', n: 'old key', c: 'objects', k: 'vintage clue antique lock' },
+      { e: '🔒', n: 'locked', c: 'objects', k: 'secure lock private encryption e2ee safe' },
+      { e: '🔓', n: 'unlocked', c: 'objects', k: 'open insecure access public' },
+      { e: '🔏', n: 'locked with pen', c: 'objects', k: 'privacy signature sign' },
+      { e: '🔐', n: 'locked with key', c: 'objects', k: 'vault security private cipher' },
+      { e: '🔔', n: 'bell', c: 'objects', k: 'notification alarm ring chime' },
+      { e: '📦', n: 'package', c: 'objects', k: 'box delivery parcel ship' },
+      { e: '✉️', n: 'envelope', c: 'objects', k: 'mail message email letter' },
+      { e: '📫', n: 'closed mailbox', c: 'objects', k: 'post mail inbox delivery' },
+      { e: '📝', n: 'memo', c: 'objects', k: 'note document write text paper' },
+      { e: '📄', n: 'page facing up', c: 'objects', k: 'document file paper text' },
+      { e: '📅', n: 'date calendar', c: 'objects', k: 'schedule plan event day' },
+      { e: '📊', n: 'bar chart', c: 'objects', k: 'analytics stats data graph' },
+      { e: '📈', n: 'chart increasing', c: 'objects', k: 'growth stocks profit up' },
+      { e: '📉', n: 'chart decreasing', c: 'objects', k: 'loss crash down drop' },
+      { e: '🔍', n: 'magnifying glass left', c: 'objects', k: 'search inspect find query' },
+      { e: '🔎', n: 'magnifying glass right', c: 'objects', k: 'examine look search' },
+
+      // Symbols & Security
+      { e: '✅', n: 'check mark button', c: 'symbols', k: 'yes ok correct tick green' },
+      { e: '❌', n: 'cross mark', c: 'symbols', k: 'no wrong cancel x error' },
+      { e: '⭕', n: 'heavy large circle', c: 'symbols', k: 'circle ring ok red' },
+      { e: '⛔', n: 'no entry', c: 'symbols', k: 'stop forbidden access denied' },
+      { e: '🚫', n: 'prohibited', c: 'symbols', k: 'ban restricted no forbidden' },
+      { e: '⚠️', n: 'warning', c: 'symbols', k: 'alert caution hazard danger' },
+      { e: '☢️', n: 'radioactive', c: 'symbols', k: 'nuclear radiation hazard' },
+      { e: '☣️', n: 'biohazard', c: 'symbols', k: 'biological virus danger' },
+      { e: '🛑', n: 'stop sign', c: 'symbols', k: 'halt octagon red' },
+      { e: '♻️', n: 'recycling symbol', c: 'symbols', k: 'eco green reuse waste' },
+      { e: '❇️', n: 'sparkle', c: 'symbols', k: 'green star sparkle shiny' },
+      { e: '✳️', n: 'eight spoked asterisk', c: 'symbols', k: 'star footnote asterisk' },
+      { e: '🌐', n: 'globe with meridians', c: 'symbols', k: 'world internet web p2p online' },
+      { e: '💠', n: 'diamond with a dot', c: 'symbols', k: 'gem cute kawaii blue' },
+      { e: '♾️', n: 'infinity', c: 'symbols', k: 'endless loop forever' },
+      { e: '❓', n: 'question mark', c: 'symbols', k: 'confused what why help' },
+      { e: '❗', n: 'exclamation mark', c: 'symbols', k: 'alert important attention' },
+      { e: '💤', n: 'zzz', c: 'symbols', k: 'sleep tired snoring bedtime' },
+      { e: '🔴', n: 'red circle', c: 'symbols', k: 'recording live status dot' },
+      { e: '🟢', n: 'green circle', c: 'symbols', k: 'online verified active connected' },
+      { e: '🔵', n: 'blue circle', c: 'symbols', k: 'info status calm' },
+      { e: '🟡', n: 'yellow circle', c: 'symbols', k: 'pending away idle' },
+      { e: '🟠', n: 'orange circle', c: 'symbols', k: 'warning alert' },
+      { e: '🟣', n: 'purple circle', c: 'symbols', k: 'dot circle violet' },
+      { e: '⚫', n: 'black circle', c: 'symbols', k: 'offline dark' },
+      { e: '⚪', n: 'white circle', c: 'symbols', k: 'light empty' },
+      { e: '🏁', n: 'chequered flag', c: 'symbols', k: 'race finish victory win' },
+      { e: '🚩', n: 'triangular flag', c: 'symbols', k: 'red flag marker priority' },
+      { e: '🏴‍☠️', n: 'pirate flag', c: 'symbols', k: 'jolly roger skull corsair' },
+
+      // Flags
+      { e: '🇺🇸', n: 'flag United States', c: 'flags', k: 'usa america american' },
+      { e: '🇬🇧', n: 'flag United Kingdom', c: 'flags', k: 'uk britain british london' },
+      { e: '🇨🇦', n: 'flag Canada', c: 'flags', k: 'canadian maple leaf' },
+      { e: '🇦🇺', n: 'flag Australia', c: 'flags', k: 'australian kangaroo' },
+      { e: '🇯🇵', n: 'flag Japan', c: 'flags', k: 'japanese tokyo' },
+      { e: '🇩🇪', n: 'flag Germany', c: 'flags', k: 'german berlin' },
+      { e: '🇫🇷', n: 'flag France', c: 'flags', k: 'french paris' },
+      { e: '🇮🇳', n: 'flag India', c: 'flags', k: 'indian delhi' },
+      { e: '🇧🇷', n: 'flag Brazil', c: 'flags', k: 'brazilian rio' },
+      { e: '🇦🇪', n: 'flag United Arab Emirates', c: 'flags', k: 'uae dubai abu dhabi' },
+      { e: '🇺🇳', n: 'flag United Nations', c: 'flags', k: 'un international world' },
+      { e: '🏳️‍🌈', n: 'rainbow flag', c: 'flags', k: 'pride lgbtq equality' },
+      { e: '🏴', n: 'black flag', c: 'flags', k: 'dark stealth' },
+      { e: '🏳️', n: 'white flag', c: 'flags', k: 'peace surrender truce' }
+    ];
+
+    this.activeEmojiCategory = 'all';
+
+    // Render initial emoji grid
+    this.renderEmojiGrid(this.allEmojis);
+
+    // Toggle button
+    if (this.btnToggleEmojiPicker) {
+      this.btnToggleEmojiPicker.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = this.emojiPickerPopover.style.display !== 'none';
+        if (isOpen) {
+          this.emojiPickerPopover.style.display = 'none';
+        } else {
+          this.emojiPickerPopover.style.display = 'flex';
+          if (this.emojiSearchInput) {
+            this.emojiSearchInput.value = '';
+            this.emojiSearchInput.focus();
+          }
+          this.filterEmojis();
+        }
+      });
+    }
+
+    // Close button
+    if (this.btnCloseEmojiPicker) {
+      this.btnCloseEmojiPicker.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.emojiPickerPopover.style.display = 'none';
+      });
+    }
+
+    // Category Tabs
+    if (this.emojiCategoryTabs) {
+      this.emojiCategoryTabs.querySelectorAll('.emoji-tab-btn').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.emojiCategoryTabs.querySelectorAll('.emoji-tab-btn').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          this.activeEmojiCategory = tab.dataset.cat;
+          this.filterEmojis();
+        });
+      });
+    }
+
+    // Search input
+    if (this.emojiSearchInput) {
+      this.emojiSearchInput.addEventListener('input', () => {
+        const query = this.emojiSearchInput.value.trim();
+        if (this.btnClearEmojiSearch) {
+          this.btnClearEmojiSearch.style.display = query ? 'block' : 'none';
+        }
+        this.filterEmojis();
+      });
+    }
+
+    // Clear search
+    if (this.btnClearEmojiSearch) {
+      this.btnClearEmojiSearch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.emojiSearchInput) {
+          this.emojiSearchInput.value = '';
+          this.emojiSearchInput.focus();
+        }
+        this.btnClearEmojiSearch.style.display = 'none';
+        this.filterEmojis();
+      });
+    }
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (this.emojiPickerPopover && this.emojiPickerPopover.style.display !== 'none') {
+        if (!this.emojiPickerPopover.contains(e.target) && e.target !== this.btnToggleEmojiPicker && !this.btnToggleEmojiPicker.contains(e.target)) {
+          this.emojiPickerPopover.style.display = 'none';
+        }
+      }
+    });
+  }
+
+  filterEmojis() {
+    const query = this.emojiSearchInput ? this.emojiSearchInput.value.toLowerCase().trim() : '';
+    let filtered = this.allEmojis;
+
+    if (this.activeEmojiCategory && this.activeEmojiCategory !== 'all') {
+      filtered = filtered.filter(item => item.c === this.activeEmojiCategory);
+    }
+
+    if (query) {
+      filtered = filtered.filter(item => 
+        item.e.includes(query) || 
+        item.n.toLowerCase().includes(query) || 
+        item.k.toLowerCase().includes(query)
+      );
+    }
+
+    this.renderEmojiGrid(filtered);
+  }
+
+  renderEmojiGrid(emojis) {
+    if (!this.emojiGridContainer) return;
+    this.emojiGridContainer.innerHTML = '';
+
+    if (emojis.length === 0) {
+      this.emojiGridContainer.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 1.5rem 0.5rem; text-align: center; color: var(--text-subtle); font-size: 0.8rem;">
+          <i class='bx bx-search' style="font-size: 1.5rem; display:block; margin-bottom: 0.3rem;"></i>
+          No emojis match your search.
+        </div>
+      `;
+      return;
+    }
+
+    emojis.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'emoji-item-btn';
+      btn.dataset.emoji = item.e;
+      btn.title = item.n;
+      btn.textContent = item.e;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.chatInput) {
+          this.chatInput.value += item.e;
+          this.chatInput.focus();
+        }
+        if (this.emojiPreviewText) {
+          this.emojiPreviewText.textContent = `Inserted ${item.e} (${item.n})`;
+        }
+      });
+
+      btn.addEventListener('mouseenter', () => {
+        if (this.emojiPreviewText) {
+          this.emojiPreviewText.textContent = `${item.e} ${item.n}`;
+        }
+      });
+
+      this.emojiGridContainer.appendChild(btn);
+    });
+  }
+
+  // ============================================================================
+  // ENVELOPE ENCRYPTION HELPERS (FOR ZERO-LEAK FILES & VOICE NOTES)
+  // ============================================================================
+  async createEnvelopeRecipientKeys(rawTransferKeyBase64) {
+    const recipientKeys = {};
+    const targetPeers = Array.from(new Set([
+      ...Array.from(this.webrtc.peerProfiles.keys()),
+      ...Array.from(this.webrtc.connections.keys())
+    ]));
+
+    for (const peerId of targetPeers) {
+      const peerKey = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
+      if (peerKey) {
+        try {
+          const enc = await this.crypto.encrypt(rawTransferKeyBase64, peerKey);
+          recipientKeys[peerId] = enc;
+        } catch (e) {
+          console.warn('Envelope encryption failed for peer', peerId, e);
+        }
+      }
+    }
+
+    // Always encrypt for self and broadcast room using derivedKey (if present)
+    if (this.currentRoom.derivedKey) {
+      try {
+        const selfEnc = await this.crypto.encrypt(rawTransferKeyBase64, this.currentRoom.derivedKey);
+        recipientKeys[this.currentUser.userId] = selfEnc;
+        recipientKeys['room'] = selfEnc;
+      } catch (e) {}
+    }
+
+    return recipientKeys;
+  }
+
+  async resolveEnvelopeTransferKey(metadata, peerId) {
+    if (!metadata.recipientKeys || typeof metadata.recipientKeys !== 'object') {
+      return null;
+    }
+
+    const sessionKey = this.currentRoom.sharedSessionKeys.get(peerId);
+    const senderId = metadata.senderId;
+    const sessionKeyBySender = senderId ? this.currentRoom.sharedSessionKeys.get(senderId) : null;
+    const roomKey = this.currentRoom.derivedKey;
+
+    const keysToTry = [sessionKey, sessionKeyBySender, roomKey].filter(Boolean);
+
+    const candidatePayloads = [
+      metadata.recipientKeys[this.webrtc.myPeerId],
+      metadata.recipientKeys[this.currentUser.userId],
+      metadata.recipientKeys['room'],
+      metadata.recipientKeys[peerId],
+      ...Object.values(metadata.recipientKeys)
+    ].filter(Boolean);
+
+    for (const payload of candidatePayloads) {
+      for (const k of keysToTry) {
+        try {
+          const rawKeyBase64 = await this.crypto.decrypt(payload.ciphertext, payload.iv, k);
+          if (rawKeyBase64 && rawKeyBase64.length > 20) {
+            return await this.crypto.importSymmetricKey(rawKeyBase64);
+          }
+        } catch (err) {
+          // Continue attempting other candidate keys
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================================
+  // FILE & IMAGE SHARING WITH INLINE PREVIEWS & ENVELOPE ENCRYPTION
   // ============================================================================
   async handleFileUpload(file) {
     if (!file) return;
@@ -1283,8 +1908,15 @@ class CipherApp {
         const arrayBuffer = reader.result;
         const base64Data = this.crypto.bufferToBase64(arrayBuffer);
 
-        const key = this.currentRoom.derivedKey;
-        const { ciphertext, iv } = await this.crypto.encrypt(base64Data, key);
+        // Generate fresh ephemeral 256-bit AES-GCM transfer key
+        const transferKey = await this.crypto.generateSymmetricKey();
+        const transferKeyBase64 = await this.crypto.exportSymmetricKey(transferKey);
+
+        // Encrypt file payload with transferKey
+        const { ciphertext, iv } = await this.crypto.encrypt(base64Data, transferKey);
+
+        // Create envelope recipient keys for all connected peers + self
+        const recipientKeys = await this.createEnvelopeRecipientKeys(transferKeyBase64);
 
         const isImg = file.type.startsWith('image/');
         const fileMetadata = {
@@ -1294,6 +1926,9 @@ class CipherApp {
           isImage: isImg,
           iv: iv,
           author: this.currentUser.username,
+          senderId: this.currentUser.userId,
+          recipientKeys: recipientKeys,
+          isVoiceNote: false
         };
 
         this.showToast(`Encrypting and streaming "${file.name}"...`);
@@ -1334,18 +1969,60 @@ class CipherApp {
   async handleIncomingFile(fileResult) {
     try {
       const { metadata, data, peerId } = fileResult;
-      const key = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
+      if (!metadata) {
+        console.warn('Received file chunk without metadata');
+        return;
+      }
 
-      const decryptedBase64 = await this.crypto.decrypt(data, metadata.iv, key);
+      let transferKey = await this.resolveEnvelopeTransferKey(metadata, peerId);
+
+      // Fallback if envelope decryption was not used (legacy / direct session key)
+      if (!transferKey) {
+        transferKey = this.currentRoom.sharedSessionKeys.get(peerId) || 
+                      (metadata.senderId ? this.currentRoom.sharedSessionKeys.get(metadata.senderId) : null) || 
+                      this.currentRoom.derivedKey;
+      }
+
+      if (!transferKey) {
+        throw new Error('No decryption key available for incoming file or voice note');
+      }
+
+      const decryptedBase64 = await this.crypto.decrypt(data, metadata.iv, transferKey);
       const buffer = this.crypto.base64ToBuffer(decryptedBase64);
+
+      // Handle voice note receiving
+      if (metadata.isVoiceNote) {
+        const mime = metadata.fileType || 'audio/webm';
+        const blob = new Blob([buffer], { type: mime });
+        const dataUrl = URL.createObjectURL(blob);
+
+        const voiceItem = {
+          type: 'voice',
+          dataUrl: dataUrl,
+          duration: metadata.duration || 0,
+          author: metadata.author || 'Peer',
+          isOutgoing: false,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        this.renderVoiceNoteCard(voiceItem);
+        this.savedMessages.push(voiceItem);
+        await this.saveEncryptedHistory();
+
+        this.playSound('receive');
+        this.showToast(`🎤 Received encrypted voice note (${voiceItem.duration}s) from ${this.escapeHTML(voiceItem.author)}`);
+        return;
+      }
+
+      // Handle standard file / image receiving
+      const isImg = metadata.isImage || (metadata.fileType && metadata.fileType.startsWith('image/'));
       const blob = new Blob([buffer], { type: metadata.fileType || 'application/octet-stream' });
       const dataUrl = URL.createObjectURL(blob);
-      const isImg = metadata.fileType && metadata.fileType.startsWith('image/');
 
       const fileItem = {
         type: isImg ? 'image' : 'file',
-        fileName: metadata.fileName,
-        fileSize: metadata.fileSize,
+        fileName: metadata.fileName || (isImg ? 'image.png' : 'file.bin'),
+        fileSize: metadata.fileSize || buffer.byteLength,
         fileType: metadata.fileType,
         isImage: isImg,
         author: metadata.author || 'Peer',
@@ -1359,10 +2036,10 @@ class CipherApp {
       await this.saveEncryptedHistory();
 
       this.playSound('receive');
-      this.showToast(`Received encrypted ${isImg ? 'image' : 'file'}: ${metadata.fileName}`);
+      this.showToast(`Received encrypted ${isImg ? 'image' : 'file'}: ${this.escapeHTML(fileItem.fileName)}`);
     } catch (err) {
-      console.error('File decryption failed:', err);
-      this.showToast('Error decrypting incoming file.');
+      console.error('File/voice decryption failed:', err);
+      this.showToast('Error decrypting incoming media: ' + (err.message || 'Key mismatch'));
     }
   }
 
@@ -1515,17 +2192,28 @@ class CipherApp {
       const base64Data = this.crypto.bufferToBase64(arrayBuffer);
       const dataUrl = URL.createObjectURL(audioBlob);
 
-      const key = this.currentRoom.derivedKey;
-      const { ciphertext, iv } = await this.crypto.encrypt(base64Data, key);
+      // Generate fresh ephemeral 256-bit AES-GCM transfer key
+      const transferKey = await this.crypto.generateSymmetricKey();
+      const transferKeyBase64 = await this.crypto.exportSymmetricKey(transferKey);
 
+      // Encrypt audio payload with transferKey
+      const { ciphertext, iv } = await this.crypto.encrypt(base64Data, transferKey);
+
+      // Create envelope recipient keys for all connected peers + self
+      const recipientKeys = await this.createEnvelopeRecipientKeys(transferKeyBase64);
+
+      const mimeType = this.supportedAudioMimeType || audioBlob.type || 'audio/webm';
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
       const metadata = {
-        fileName: `voice-note-${Date.now()}.${this.supportedAudioMimeType.includes('ogg') ? 'ogg' : 'webm'}`,
+        fileName: `voice-note-${Date.now()}.${ext}`,
         fileSize: audioBlob.size,
-        fileType: audioBlob.type,
+        fileType: mimeType,
         duration: durationSecs,
         iv: iv,
         isVoiceNote: true,
         author: this.currentUser.username,
+        senderId: this.currentUser.userId,
+        recipientKeys: recipientKeys
       };
 
       this.showToast('Transmitting encrypted voice note...');
