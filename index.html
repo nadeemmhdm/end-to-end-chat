@@ -487,11 +487,30 @@
                   <span class="recording-dot"></span>
                   <span id="recording-duration">00:00</span>
                 </div>
-                <div style="display:flex; gap:0.5rem;">
-                  <button class="btn btn-icon" id="btn-cancel-recording" style="background:transparent; color:#ff4757;" title="Cancel recording">
+
+                <div class="recording-audio-meter">
+                  <div class="voice-waveform-visualizer" id="voice-recording-visualizer">
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                    <span class="v-bar"></span>
+                  </div>
+                  <span id="voice-live-status" class="voice-live-status">Listening...</span>
+                </div>
+
+                <div style="display:flex; gap:0.5rem; align-items:center;">
+                  <button type="button" class="btn btn-icon" id="btn-cancel-recording" style="background:transparent; color:#ff4757;" title="Cancel recording">
                     <i class='bx bx-x'></i>
                   </button>
-                  <button class="btn btn-icon" id="btn-send-recording" style="background:var(--color-danger); color:#fff;" title="Send voice note">
+                  <button type="button" class="btn btn-icon" id="btn-send-recording" style="background:var(--color-danger); color:#fff;" title="Send voice note">
                     <i class='bx bx-check'></i>
                   </button>
                 </div>
