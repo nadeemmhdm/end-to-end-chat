@@ -42,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=minimal_v2">
+  <link rel="stylesheet" href="css/style.css?v=minimal_v3">
   <style>
     @media (max-width: 768px) {
       .header-desktop-only {
@@ -601,8 +601,8 @@
       </div>
 
       <!-- Permanent Device ID -->
-      <div class="form-group" style="margin-top:1.15rem;">
-        <label class="form-label" for="vault-device-id">
+      <div class="form-group" style="margin-top:0.75rem; margin-bottom:0.6rem;">
+        <label class="form-label" for="vault-device-id" style="margin-bottom:0.35rem;">
           <span>Permanent User / Device ID</span>
           <span style="font-size:0.72rem; color:var(--text-subtle);">Direct Peer Identifier</span>
         </label>
@@ -616,45 +616,45 @@
       </div>
 
       <!-- 1. Unique Private Access URL -->
-      <div class="url-chip" style="border-color: rgba(0, 230, 153, 0.3); margin-top:0.85rem; padding:0.65rem 0.85rem;">
-        <div class="url-chip-label" style="color: var(--accent-primary); margin-bottom:0.3rem;">
+      <div class="url-chip" style="border-color: rgba(0, 230, 153, 0.3); margin-top:0.65rem; padding:0.55rem 0.8rem;">
+        <div class="url-chip-label" style="color: var(--accent-primary); margin-bottom:0.25rem;">
           <i class='bx bx-key'></i> Your Unique Access URL (Bookmark to access this account)
         </div>
         <div class="url-chip-row">
           <input type="text" id="unique-access-url" class="url-chip-input" readonly spellcheck="false">
-          <button type="button" class="btn btn-icon" id="btn-copy-access-url" style="width:30px; height:30px; font-size:1rem;" title="Copy Private Access URL">
+          <button type="button" class="btn btn-icon" id="btn-copy-access-url" style="width:28px; height:28px; font-size:0.95rem;" title="Copy Private Access URL">
             <i class='bx bx-copy'></i>
           </button>
         </div>
-        <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.3rem;">
+        <div style="font-size:0.68rem; color:var(--text-muted); margin-top:0.25rem;">
           Save this URL securely to restore this account on any browser without passwords.
         </div>
       </div>
 
       <!-- 2. Public Chat Link -->
-      <div class="url-chip" style="border-color: rgba(59, 130, 246, 0.3); margin-top:0.85rem; padding:0.65rem 0.85rem;">
-        <div class="url-chip-label" style="color: #60a5fa; margin-bottom:0.3rem;">
+      <div class="url-chip" style="border-color: rgba(59, 130, 246, 0.3); margin-top:0.65rem; padding:0.55rem 0.8rem;">
+        <div class="url-chip-label" style="color: #60a5fa; margin-bottom:0.25rem;">
           <i class='bx bx-share-alt'></i> Public Chat Link (Share with friends so they message you)
         </div>
         <div class="url-chip-row">
           <input type="text" id="public-chat-url" class="url-chip-input" style="color:#93c5fd;" readonly spellcheck="false">
-          <button type="button" class="btn btn-icon" id="btn-copy-public-url" style="width:30px; height:30px; font-size:1rem;" title="Copy Public Chat Link">
+          <button type="button" class="btn btn-icon" id="btn-copy-public-url" style="width:28px; height:28px; font-size:0.95rem;" title="Copy Public Chat Link">
             <i class='bx bx-copy'></i>
           </button>
         </div>
-        <div style="display:flex; gap:0.4rem; margin-top:0.5rem;">
-          <button type="button" class="btn btn-secondary" id="btn-test-second-tab" style="flex:1; padding:0.35rem 0.6rem; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Opens a new tab to test messaging on this device">
+        <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
+          <button type="button" class="btn btn-secondary" id="btn-test-second-tab" style="flex:1; padding:0.3rem 0.5rem; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Opens a new tab to test messaging on this device">
             <i class='bx bx-window-open'></i> Test in 2nd Tab
           </button>
-          <button type="button" class="btn btn-secondary" id="btn-copy-chat-quick" style="flex:1; padding:0.35rem 0.6rem; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Copy public chat URL to share">
+          <button type="button" class="btn btn-secondary" id="btn-copy-chat-quick" style="flex:1; padding:0.3rem 0.5rem; font-size:0.75rem; display:flex; align-items:center; justify-content:center; gap:0.3rem;" title="Copy public chat URL to share">
             <i class='bx bx-share-alt'></i> Share Chat Link
           </button>
         </div>
       </div>
 
       <!-- Master Cryptographic Key (Masked with Eye Toggle) -->
-      <div class="form-group" style="margin-top:0.85rem;">
-        <label class="form-label" for="vault-secret-key">
+      <div class="form-group" style="margin-top:0.65rem; margin-bottom:0.75rem;">
+        <label class="form-label" for="vault-secret-key" style="margin-bottom:0.35rem;">
           <span>16-Character Master Cryptographic Key</span>
           <span style="font-size:0.72rem; color:var(--accent-primary);">PBKDF2 600k CSPRNG</span>
         </label>
@@ -670,8 +670,8 @@
         </div>
       </div>
 
-      <div style="margin-top:1.25rem;">
-        <button type="button" class="btn btn-primary btn-close-modal" style="width:100%; padding:0.7rem;">
+      <div style="margin-top:0.95rem;">
+        <button type="button" class="btn btn-primary btn-close-modal" style="width:100%; padding:0.65rem;">
           <i class='bx bx-check'></i> Done
         </button>
       </div>
@@ -740,7 +740,7 @@
         </div>
 
         <!-- 2. Preferences & Appearance -->
-        <div class="settings-group" style="margin-top:1rem;">
+        <div class="settings-group">
           <div class="settings-group-title">
             <i class='bx bx-palette'></i> Preferences & Appearance
           </div>
@@ -774,7 +774,7 @@
         </div>
 
         <!-- 3. Danger Zone & Purge -->
-        <div class="settings-group" style="margin-top:1rem;">
+        <div class="settings-group">
           <div class="settings-group-title" style="color:var(--color-danger);">
             <i class='bx bx-shield-x'></i> Danger Zone
           </div>
@@ -814,15 +814,15 @@
         </div>
 
         <!-- Threat Model Link -->
-        <div style="margin-top:1rem;">
-          <a href="audit.html" class="btn btn-secondary" style="width:100%; padding:0.55rem; font-size:0.8rem; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
+        <div>
+          <a href="audit.html" class="btn btn-secondary" style="width:100%; padding:0.5rem; font-size:0.78rem; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
             <i class='bx bx-book-open'></i> <span>Cryptographic Threat Model & Whitepaper</span>
           </a>
         </div>
       </div>
 
-      <div style="margin-top:1.25rem;">
-        <button type="button" class="btn btn-primary btn-close-modal" style="width:100%; padding:0.7rem;">
+      <div style="margin-top:0.85rem;">
+        <button type="button" class="btn btn-primary btn-close-modal" style="width:100%; padding:0.65rem;">
           <i class='bx bx-check'></i> Close Settings
         </button>
       </div>
