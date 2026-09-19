@@ -46,6 +46,8 @@ class CipherApp {
     // Stored Message History in memory
     this.savedMessages = [];
     this.recentPeers = new Set();
+    this.STORAGE_CONTACTS_KEY = 'cc_contacts_vault_v1';
+    this.contacts = new Map(); // userId -> contact model object
 
     this.settings = {
       ephemeralDuration: 0,
@@ -194,6 +196,10 @@ class CipherApp {
     this.chatActivePeerAvatar = document.getElementById('chat-active-peer-avatar');
     this.chatActivePeerName = document.getElementById('chat-active-peer-name');
     this.chatActivePeerStatusText = document.getElementById('chat-active-peer-status-text');
+    this.btnReconnectPeerHeader = document.getElementById('btn-reconnect-peer-header');
+    this.chatHeaderPeerCard = document.getElementById('chat-header-peer-card');
+    this.totalContactsCount = document.getElementById('total-contacts-count');
+    this.onlinePeerBadge = document.getElementById('online-peer-badge');
   }
 
   // ============================================================================
@@ -315,8 +321,11 @@ class CipherApp {
     // Load saved encrypted messages
     await this.loadEncryptedHistory();
 
-    // Load recent peers
+    // Load contacts & recent peers
     this.loadRecentPeers();
+    this.loadContacts();
+    this.updatePeerListUI();
+    this.updateChatHeader();
 
     // Update UI Badges & Vault Modal
     this.updateUserBadgeUI();
@@ -510,6 +519,9 @@ class CipherApp {
     this.showToast(`Connecting to peer ${targetPeerId.slice(0, 14)}...`);
     this.currentRoom.activeRecipientId = targetPeerId;
     this.addRecentPeer(targetPeerId);
+    this.recordContact({ userId: targetPeerId, role: 'receiver' });
+    this.updateChatHeader();
+    this.updatePeerListUI();
 
     // If WebRTC is not ready yet, queue the connection
     if (!this.webrtc.myPeerId || !this.webrtc.peer || this.webrtc.peer.destroyed) {
@@ -547,6 +559,200 @@ class CipherApp {
         }
       }
     } catch (e) {}
+  }
+
+  // ============================================================================
+  // PERSISTENT CONTACTS & ALL USERS STORE (LOCAL STORAGE)
+  // ============================================================================
+  getContactsStorageKey() {
+    return `${this.STORAGE_CONTACTS_KEY}_${this.currentUser.userId || 'anon'}`;
+  }
+
+  loadContacts() {
+    try {
+      const raw = localStorage.getItem(this.getContactsStorageKey());
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          this.contacts.clear();
+          list.forEach(c => {
+            if (c && c.userId) this.contacts.set(c.userId, c);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load contacts:', e);
+    }
+  }
+
+  saveContactsToStorage() {
+    try {
+      const list = Array.from(this.contacts.values());
+      localStorage.setItem(this.getContactsStorageKey(), JSON.stringify(list));
+    } catch (e) {
+      console.warn('Failed to save contacts to storage:', e);
+    }
+  }
+
+  getContacts() {
+    return Array.from(this.contacts.values());
+  }
+
+  getContact(userId) {
+    if (!userId) return null;
+    return this.contacts.get(userId) || null;
+  }
+
+  recordContact({ userId, username, lastMessage, role, isVerified }) {
+    if (!userId) return;
+    userId = userId.trim();
+    // Do not record self as contact
+    if (this.currentUser && userId === this.currentUser.userId) return;
+    if (this.webrtc && this.webrtc.myPeerId && userId === this.webrtc.myPeerId) return;
+
+    const now = Date.now();
+    let contact = this.contacts.get(userId);
+
+    if (!contact) {
+      contact = {
+        userId: userId,
+        username: (username && !username.startsWith('Peer_')) ? username : ('Agent_' + userId.slice(4, 9)),
+        lastSeen: now,
+        lastMessage: lastMessage || '',
+        lastMessageTime: lastMessage ? now : 0,
+        lastMessageOutgoing: role === 'receiver',
+        role: role || 'peer',
+        isVerified: !!isVerified,
+        addedAt: now
+      };
+      this.contacts.set(userId, contact);
+    } else {
+      if (username && !username.startsWith('Peer_') && username !== contact.userId) {
+        contact.username = username;
+      }
+      contact.lastSeen = now;
+      if (lastMessage !== undefined) {
+        contact.lastMessage = lastMessage;
+        contact.lastMessageTime = now;
+        contact.lastMessageOutgoing = (role === 'receiver');
+      }
+      if (role) contact.role = role;
+      if (isVerified !== undefined) contact.isVerified = isVerified;
+    }
+
+    this.saveContactsToStorage();
+  }
+
+  removeContact(userId) {
+    if (!userId) return;
+    if (this.contacts.has(userId)) {
+      const contact = this.contacts.get(userId);
+      this.contacts.delete(userId);
+      this.saveContactsToStorage();
+
+      if (this.currentRoom.activeRecipientId === userId) {
+        this.currentRoom.activeRecipientId = null;
+        this.updateChatHeader();
+      }
+      this.updatePeerListUI();
+      this.showToast(`Contact ${contact.username || userId.slice(0, 8)} removed`);
+    }
+  }
+
+  setActiveRecipient(peerId) {
+    if (!peerId) return;
+    this.currentRoom.activeRecipientId = peerId;
+    this.updateChatHeader();
+    this.updatePeerListUI();
+
+    const isOnline = this.webrtc && (this.webrtc.connections.has(peerId) || this.webrtc.peerProfiles.has(peerId));
+    const contact = this.getContact(peerId);
+    const displayName = (contact && contact.username) || ('Peer_' + peerId.slice(0, 8));
+
+    if (isOnline) {
+      this.showToast(`🟢 Chat: ${displayName} (Online)`);
+    } else {
+      this.showToast(`⚪ Selected: ${displayName} (Offline)`);
+    }
+
+    this.closeSidebarDrawer();
+  }
+
+  closeSidebarDrawer() {
+    if (window.innerWidth <= 900 && this.chatSidebar) {
+      this.chatSidebar.classList.remove('open');
+      if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
+    }
+  }
+
+  formatTimeAgo(timestamp) {
+    if (!timestamp) return 'Never';
+    const diff = Math.max(0, Date.now() - timestamp);
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return 'Just now';
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  updateChatHeader() {
+    if (!this.chatActivePeerName || !this.chatActivePeerAvatar || !this.chatActivePeerStatusText) return;
+
+    const activeId = this.currentRoom.activeRecipientId;
+    const reconnectBtn = document.getElementById('btn-reconnect-peer-header');
+
+    if (!activeId) {
+      this.chatActivePeerName.innerHTML = `<span>Direct P2P Channel</span>`;
+      this.chatActivePeerAvatar.innerHTML = `<i class='bx bx-user'></i>`;
+      const count = this.webrtc ? this.webrtc.getConnectedPeerCount() : 0;
+      if (count > 0) {
+        this.chatActivePeerStatusText.innerHTML = `<span class="status-dot-pulse"></span> <span style="color:#10b981; font-weight:600;">${count} Online</span> <span style="color:var(--text-subtle);">• E2EE Active</span>`;
+      } else {
+        this.chatActivePeerStatusText.innerHTML = `<span class="status-dot-offline"></span> <span style="color:var(--text-subtle);">Waiting for peers...</span>`;
+      }
+      if (reconnectBtn) reconnectBtn.style.display = 'none';
+      return;
+    }
+
+    const contact = this.getContact(activeId);
+    const profile = this.webrtc ? this.webrtc.peerProfiles.get(activeId) : null;
+    const isOnline = this.webrtc && (this.webrtc.connections.has(activeId) || !!profile);
+
+    const displayName = (profile && profile.username) || (contact && contact.username) || ('Peer_' + activeId.slice(0, 8));
+    const initial = displayName.charAt(0).toUpperCase();
+
+    this.chatActivePeerAvatar.innerHTML = `
+      <span style="font-weight:700; font-size:0.88rem; color:var(--accent-primary);">${initial}</span>
+      <span class="peer-status-dot ${isOnline ? 'online' : 'offline'}"></span>
+    `;
+
+    this.chatActivePeerName.innerHTML = `
+      <span style="font-weight:700;">${this.escapeHTML(displayName)}</span>
+      <span style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-subtle); margin-left:0.35rem; font-weight:400;">(${activeId.slice(0, 10)}...)</span>
+    `;
+
+    if (isOnline) {
+      this.chatActivePeerStatusText.innerHTML = `
+        <span class="status-dot-pulse"></span>
+        <span style="color:#10b981; font-weight:600;">Online</span>
+        <span style="color:var(--text-subtle); font-size:0.68rem;">• E2EE Connected</span>
+      `;
+      if (reconnectBtn) reconnectBtn.style.display = 'none';
+    } else {
+      const lastSeenText = contact && contact.lastSeen ? this.formatTimeAgo(contact.lastSeen) : 'Offline';
+      this.chatActivePeerStatusText.innerHTML = `
+        <span class="status-dot-offline"></span>
+        <span style="color:var(--text-muted); font-weight:500;">Offline (${lastSeenText})</span>
+      `;
+      if (reconnectBtn) {
+        reconnectBtn.style.display = 'inline-flex';
+        reconnectBtn.title = `Connect to ${displayName}`;
+      }
+    }
   }
 
   // Sound Engine
@@ -914,6 +1120,29 @@ class CipherApp {
       });
     });
 
+    // Chat Header Peer Card & Direct Reconnect Action
+    if (this.btnReconnectPeerHeader) {
+      this.btnReconnectPeerHeader.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.currentRoom.activeRecipientId) {
+          this.handleDirectChatWithPeer(this.currentRoom.activeRecipientId);
+        }
+      });
+    }
+
+    if (this.chatHeaderPeerCard) {
+      this.chatHeaderPeerCard.addEventListener('click', () => {
+        if (this.currentRoom.activeRecipientId) {
+          const isOnline = this.webrtc && (this.webrtc.connections.has(this.currentRoom.activeRecipientId) || this.webrtc.peerProfiles.has(this.currentRoom.activeRecipientId));
+          if (!isOnline) {
+            this.handleDirectChatWithPeer(this.currentRoom.activeRecipientId);
+          } else {
+            this.openSafetyModal(this.currentRoom.activeRecipientId);
+          }
+        }
+      });
+    }
+
     // Mobile Drawer & Backdrop Controls
     if (this.btnMobileMenu && this.chatSidebar) {
       this.btnMobileMenu.addEventListener('click', (e) => {
@@ -1026,7 +1255,9 @@ class CipherApp {
         this.peerConnectStatus.style.color = '#10b981';
       }
       this.addRecentPeer(peerId);
+      this.recordContact({ userId: peerId, role: 'peer' });
       this.updatePeerListUI();
+      this.updateChatHeader();
       this.playSound('alert');
     });
 
@@ -1036,7 +1267,13 @@ class CipherApp {
         this.peerConnectStatus.textContent = `Peer disconnected.`;
         this.peerConnectStatus.style.color = 'var(--text-muted)';
       }
+      const contact = this.getContact(peerId);
+      if (contact) {
+        contact.lastSeen = Date.now();
+        this.saveContactsToStorage();
+      }
       this.updatePeerListUI();
+      this.updateChatHeader();
     });
 
     this.webrtc.on('message', async ({ peerId, data }) => {
@@ -1421,7 +1658,14 @@ class CipherApp {
 
         this.updatePeerTrustBadge(isVerified);
         this.addRecentPeer(peerId);
+        this.recordContact({
+          userId: peerId,
+          username: packet.username,
+          isVerified: isVerified,
+          role: 'peer'
+        });
         this.updatePeerListUI();
+        this.updateChatHeader();
 
         // Reciprocal handshake: Send signed handshake-ack back
         if (!packet.isAck) {
@@ -1461,7 +1705,9 @@ class CipherApp {
       const profile = this.webrtc.peerProfiles.get(peerId);
       if (profile) {
         profile.username = packet.username;
+        this.recordContact({ userId: peerId, username: packet.username });
         this.updatePeerListUI();
+        this.updateChatHeader();
         this.showToast(`Peer updated username to: ${packet.username}`);
       }
       return;
@@ -1490,6 +1736,13 @@ class CipherApp {
 
         this.renderMessageBubble(msgObj);
 
+        this.recordContact({
+          userId: peerId,
+          username: msg.username || 'Peer',
+          lastMessage: msg.text,
+          role: 'sender'
+        });
+
         if (!msgObj.ephemeralSeconds) {
           this.savedMessages.push(msgObj);
           await this.saveEncryptedHistory();
@@ -1510,6 +1763,12 @@ class CipherApp {
             ephemeralSeconds: msg.ephemeralDuration || 0
           };
           this.renderMessageBubble(msgObj);
+          this.recordContact({
+            userId: peerId,
+            username: msg.username || 'Peer',
+            lastMessage: msg.text,
+            role: 'sender'
+          });
           if (!msgObj.ephemeralSeconds) {
             this.savedMessages.push(msgObj);
             await this.saveEncryptedHistory();
@@ -1543,6 +1802,11 @@ class CipherApp {
     let deliveredCount = 0;
 
     for (const peerId of targetPeers) {
+      this.recordContact({
+        userId: peerId,
+        lastMessage: text,
+        role: 'receiver'
+      });
       const key = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
       const { ciphertext, iv } = await this.crypto.encrypt(JSON.stringify(payload), key);
 
@@ -1553,6 +1817,14 @@ class CipherApp {
         iv: iv
       });
       if (sent) deliveredCount++;
+    }
+
+    if (this.currentRoom.activeRecipientId) {
+      this.recordContact({
+        userId: this.currentRoom.activeRecipientId,
+        lastMessage: text,
+        role: 'receiver'
+      });
     }
 
     if (targetPeers.length === 0) {
@@ -1580,6 +1852,7 @@ class CipherApp {
       await this.saveEncryptedHistory();
     }
 
+    this.updatePeerListUI();
     this.chatInput.value = '';
     this.updateSendButtonState();
     this.playSound('send');
@@ -2438,6 +2711,15 @@ class CipherApp {
         this.savedMessages.push(fileItem);
         await this.saveEncryptedHistory();
 
+        if (this.currentRoom.activeRecipientId) {
+          this.recordContact({
+            userId: this.currentRoom.activeRecipientId,
+            lastMessage: (isImg ? '📷 ' : '📎 ') + file.name,
+            role: 'receiver'
+          });
+          this.updatePeerListUI();
+        }
+
       } catch (err) {
         console.error('File encryption error:', err);
         alert('Failed to encrypt file: ' + err.message);
@@ -2494,6 +2776,14 @@ class CipherApp {
         this.savedMessages.push(voiceItem);
         await this.saveEncryptedHistory();
 
+        this.recordContact({
+          userId: metadata.senderId || peerId,
+          username: metadata.author || 'Peer',
+          lastMessage: '🎙️ Voice Note',
+          role: 'sender'
+        });
+        this.updatePeerListUI();
+
         this.playSound('receive');
         this.showToast(`🎤 Received encrypted voice note (${voiceItem.duration}s) from ${this.escapeHTML(voiceItem.author)}`);
         return;
@@ -2520,6 +2810,14 @@ class CipherApp {
       this.renderFileCard(fileItem);
       this.savedMessages.push(fileItem);
       await this.saveEncryptedHistory();
+
+      this.recordContact({
+        userId: metadata.senderId || peerId,
+        username: metadata.author || 'Peer',
+        lastMessage: (isImg ? '📷 ' : '📎 ') + (metadata.fileName || 'File'),
+        role: 'sender'
+      });
+      this.updatePeerListUI();
 
       this.playSound('receive');
       this.showToast(`Received encrypted ${isImg ? 'image' : 'file'}: ${this.escapeHTML(fileItem.fileName)}`);
@@ -2956,6 +3254,15 @@ class CipherApp {
       this.renderVoiceNoteCard(voiceItem);
       this.savedMessages.push(voiceItem);
       await this.saveEncryptedHistory();
+
+      if (this.currentRoom.activeRecipientId) {
+        this.recordContact({
+          userId: this.currentRoom.activeRecipientId,
+          lastMessage: '🎙️ Voice Note',
+          role: 'receiver'
+        });
+        this.updatePeerListUI();
+      }
       this.playSound('send');
 
     } catch (err) {
@@ -3204,56 +3511,113 @@ class CipherApp {
   }
 
   updatePeerListUI() {
+    if (!this.peerListContainer) return;
     this.peerListContainer.innerHTML = '';
-    const profiles = this.webrtc.peerProfiles;
-    const count = this.webrtc.getConnectedPeerCount();
-    this.connectedCount.textContent = count;
 
-    if (profiles.size === 0) {
+    // Auto-sync any currently active WebRTC peers into contacts
+    if (this.webrtc && this.webrtc.peerProfiles) {
+      this.webrtc.peerProfiles.forEach((profile, peerId) => {
+        this.recordContact({
+          userId: peerId,
+          username: profile.username,
+          isVerified: profile.isVerified,
+          role: 'peer'
+        });
+      });
+    }
+
+    const contacts = this.getContacts();
+    const connectedCount = this.webrtc ? this.webrtc.getConnectedPeerCount() : 0;
+
+    if (this.connectedCount) {
+      this.connectedCount.textContent = connectedCount;
+    }
+    if (this.totalContactsCount) {
+      this.totalContactsCount.textContent = contacts.length;
+    }
+    if (this.onlinePeerBadge) {
+      this.onlinePeerBadge.innerHTML = `<span id="connected-peer-count">${connectedCount}</span> Online`;
+    }
+
+    if (contacts.length === 0) {
       this.peerListContainer.innerHTML = `
-        <li style="padding: 1rem; font-size: 0.8rem; color: var(--text-subtle); text-align: center;">
-          <i class='bx bx-loader-alt bx-spin' style="font-size: 1.4rem; margin-bottom: 0.4rem; display:block;"></i>
-          Waiting for peers... Share your Public Chat Link or enter a Peer ID above.
+        <li style="padding: 1.5rem 0.75rem; font-size: 0.8rem; color: var(--text-subtle); text-align: center; display:flex; flex-direction:column; align-items:center; gap:0.5rem;">
+          <i class='bx bx-user-plus' style="font-size: 1.8rem; color: var(--accent-primary); opacity: 0.8;"></i>
+          <div style="font-weight:600; color:var(--text-main);">No Contacts Saved Yet</div>
+          <div style="font-size:0.72rem; color:var(--text-subtle); max-width:210px; line-height:1.4;">
+            Connect with a Peer ID above or share your Public Chat Link to message a user.
+          </div>
         </li>
       `;
+      this.updateChatHeader();
       return;
     }
 
-    profiles.forEach((profile, peerId) => {
+    // Sort contacts: Online users first, then by lastSeen descending
+    const sorted = [...contacts].sort((a, b) => {
+      const aOnline = this.webrtc && (this.webrtc.connections.has(a.userId) || this.webrtc.peerProfiles.has(a.userId));
+      const bOnline = this.webrtc && (this.webrtc.connections.has(b.userId) || this.webrtc.peerProfiles.has(b.userId));
+      if (aOnline && !bOnline) return -1;
+      if (!aOnline && bOnline) return 1;
+      return (b.lastSeen || 0) - (a.lastSeen || 0);
+    });
+
+    sorted.forEach(contact => {
+      const isOnline = this.webrtc && (this.webrtc.connections.has(contact.userId) || this.webrtc.peerProfiles.has(contact.userId));
+      const isActive = this.currentRoom.activeRecipientId === contact.userId;
+      const initial = (contact.username || contact.userId).charAt(0).toUpperCase();
+
       const li = document.createElement('li');
-      li.className = 'peer-item';
-      const isVerified = !!profile.isVerified;
+      li.className = `peer-item ${isActive ? 'active' : ''}`;
+      li.dataset.userId = contact.userId;
+
+      let msgSnippet = '';
+      if (contact.lastMessage) {
+        const prefix = contact.lastMessageOutgoing ? 'You: ' : '';
+        msgSnippet = prefix + this.escapeHTML(contact.lastMessage.slice(0, 22)) + (contact.lastMessage.length > 22 ? '...' : '');
+      } else {
+        msgSnippet = `Last active: ${this.formatTimeAgo(contact.lastSeen)}`;
+      }
+
       li.innerHTML = `
         <div class="peer-avatar">
-          ${profile.username.charAt(0).toUpperCase()}
-          <span class="peer-status-dot"></span>
+          ${initial}
+          <span class="peer-status-dot ${isOnline ? 'online' : 'offline'}"></span>
         </div>
         <div class="peer-info">
-          <div class="peer-name">
-            ${this.escapeHTML(profile.username)}
-            ${isVerified 
-              ? `<i class='bx bxs-check-shield' style="color:#10b981; font-size:0.95rem; vertical-align:middle;" title="Verified Identity"></i>` 
-              : `<i class='bx bx-shield-quarter' style="color:#f59e0b; font-size:0.95rem; vertical-align:middle;" title="Signed, Unconfirmed Peer"></i>`}
+          <div class="peer-name-row">
+            <span class="peer-name" title="${this.escapeHTML(contact.username)}">
+              ${this.escapeHTML(contact.username)}
+              ${contact.isVerified ? `<i class='bx bxs-check-shield' style="color:#10b981; font-size:0.85rem; vertical-align:middle;" title="Verified Identity"></i>` : ''}
+            </span>
+            <span class="peer-status-badge ${isOnline ? 'online' : 'offline'}">${isOnline ? 'Online' : 'Offline'}</span>
           </div>
-          <div class="peer-fingerprint">ID: ${peerId.slice(0, 10)}...</div>
+          <div class="peer-fingerprint">ID: ${contact.userId.slice(0, 12)}...</div>
+          <div class="peer-last-msg">${msgSnippet}</div>
         </div>
-        <button class="btn btn-icon" onclick="event.stopPropagation(); window.cipherApp.openSafetyModal('${peerId}')" title="Verify Safety Numbers">
-          <i class='bx bx-fingerprint'></i>
-        </button>
+        <div class="peer-item-actions">
+          ${!isOnline ? `
+            <button type="button" class="peer-item-action-btn" title="Connect to Peer" onclick="event.stopPropagation(); window.cipherApp.handleDirectChatWithPeer('${contact.userId}')">
+              <i class='bx bx-link'></i>
+            </button>
+          ` : ''}
+          <button type="button" class="peer-item-action-btn" title="Safety Fingerprint" onclick="event.stopPropagation(); window.cipherApp.openSafetyModal('${contact.userId}')">
+            <i class='bx bx-fingerprint'></i>
+          </button>
+          <button type="button" class="peer-item-action-btn btn-remove-contact" title="Delete User" onclick="event.stopPropagation(); window.cipherApp.removeContact('${contact.userId}')">
+            <i class='bx bx-trash'></i>
+          </button>
+        </div>
       `;
 
-      li.style.cursor = 'pointer';
       li.addEventListener('click', () => {
-        this.currentRoom.activeRecipientId = peerId;
-        this.showToast(`Active chat with: ${profile.username}`);
-        if (window.innerWidth <= 900 && this.chatSidebar) {
-          this.chatSidebar.classList.remove('open');
-          if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
-        }
+        this.setActiveRecipient(contact.userId);
       });
 
       this.peerListContainer.appendChild(li);
     });
+
+    this.updateChatHeader();
   }
 
   openSafetyModal(peerId) {
@@ -3397,6 +3761,7 @@ class CipherApp {
     this.currentRoom.derivedKey = null;
     this.currentRoom.sharedSessionKeys.clear();
     this.currentRoom.safetyNumbers.clear();
+    if (this.contacts) this.contacts.clear();
     if (this.webrtc) this.webrtc.destroy();
     window.location.hash = '';
     window.location.reload();

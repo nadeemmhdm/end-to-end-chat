@@ -42,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=minimal_v5">
+  <link rel="stylesheet" href="css/style.css?v=contacts_v1">
   <style>
     @media (max-width: 768px) {
       .header-desktop-only {
@@ -328,8 +328,9 @@
             </div>
           </div>
 
-          <div class="sidebar-section-title">
-            <span>Direct Connected Peers (<span id="connected-peer-count">0</span>)</span>
+          <div class="sidebar-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span><i class='bx bx-user-check' style="color:var(--accent-primary); vertical-align:middle;"></i> All Contacts (<span id="total-contacts-count">0</span>)</span>
+            <span id="online-peer-badge" style="font-size:0.68rem; color:#10b981; font-weight:600; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.25); padding:0.1rem 0.45rem; border-radius:10px;"><span id="connected-peer-count">0</span> Online</span>
           </div>
 
           <ul class="peer-list" id="chat-peer-list">
@@ -386,14 +387,14 @@
               <button class="btn btn-icon mobile-menu-btn" id="btn-mobile-menu" title="Open Peers Drawer">
                 <i class='bx bx-menu'></i>
               </button>
-              <div class="chat-peer-header-info">
+              <div class="chat-peer-header-info" id="chat-header-peer-card" title="Click to view contact info / reconnect" style="cursor:pointer;">
                 <div class="chat-peer-header-avatar" id="chat-active-peer-avatar">
                   <i class='bx bx-user'></i>
                 </div>
                 <div>
                   <div class="chat-peer-header-name" id="chat-active-peer-name">Direct P2P Channel</div>
-                  <div class="chat-peer-header-status">
-                    <span class="status-dot-pulse"></span>
+                  <div class="chat-peer-header-status" id="chat-active-peer-status">
+                    <span class="status-dot-pulse" id="chat-header-status-dot"></span>
                     <span id="chat-active-peer-status-text">Encrypted & Active</span>
                   </div>
                 </div>
@@ -401,6 +402,9 @@
             </div>
 
             <div class="chat-banner-actions">
+              <button class="btn btn-secondary btn-icon" id="btn-reconnect-peer-header" title="Reconnect to Peer" style="display:none;">
+                <i class='bx bx-link'></i>
+              </button>
               <button class="btn btn-secondary btn-icon" id="btn-open-safety-modal" title="View 60-digit Cryptographic Safety Numbers">
                 <i class='bx bx-fingerprint'></i>
               </button>
@@ -923,7 +927,7 @@
   <!-- Application Logic -->
   <script src="js/crypto.js"></script>
   <script src="js/webrtc.js"></script>
-  <script src="js/app.js?v=minimal_v5"></script>
+  <script src="js/app.js?v=contacts_v1"></script>
 
   <!-- Theme Switching Script Helper -->
   <script>
