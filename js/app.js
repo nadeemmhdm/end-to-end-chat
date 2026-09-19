@@ -319,6 +319,10 @@ class CipherApp {
     }
     this.currentUser.identityPublicKeyBase64 = idPubBase64;
 
+    // Generate Ephemeral ECDH Key Pair for PFS (Perfect Forward Secrecy)
+    this.currentUser.keyPair = await this.crypto.generateECDHKeyPair();
+    this.currentUser.publicKeyBase64 = await this.crypto.exportPublicKey(this.currentUser.keyPair.publicKey);
+
     // Save account securely into device vault
     const accountRecord = {
       userId,
@@ -1943,8 +1947,14 @@ class CipherApp {
           remotePublicKey
         );
         this.currentRoom.sharedSessionKeys.set(peerId, sharedKey);
+        if (packet.sender) {
+          this.currentRoom.sharedSessionKeys.set(packet.sender, sharedKey);
+        }
         if (packet.identityPublicKey) {
           this.currentRoom.peerIdentityKeys.set(peerId, packet.identityPublicKey);
+          if (packet.sender) {
+            this.currentRoom.peerIdentityKeys.set(packet.sender, packet.identityPublicKey);
+          }
         }
 
         const safetyNumber = await this.crypto.computeSafetyNumbers(
@@ -1954,6 +1964,9 @@ class CipherApp {
           packet.identityPublicKey || ''
         );
         this.currentRoom.safetyNumbers.set(peerId, safetyNumber);
+        if (packet.sender) {
+          this.currentRoom.safetyNumbers.set(packet.sender, safetyNumber);
+        }
 
         // Check persistent verification state
         let verifiedPeers = [];
@@ -1962,6 +1975,9 @@ class CipherApp {
         } catch (e) {}
         const isVerified = verifiedPeers.includes(packet.sender);
         this.currentRoom.peerVerified.set(peerId, isVerified);
+        if (packet.sender) {
+          this.currentRoom.peerVerified.set(packet.sender, isVerified);
+        }
 
         this.webrtc.peerProfiles.set(peerId, {
           username: packet.username || 'Peer',
@@ -2013,6 +2029,9 @@ class CipherApp {
           this.peerConnectStatus.style.color = '#10b981';
         }
         this.flushPendingMessages(peerId);
+        if (packet.sender && packet.sender !== peerId) {
+          this.flushPendingMessages(packet.sender);
+        }
       } catch (err) {
         console.error('Handshake processing error:', err);
       }
@@ -2120,10 +2139,29 @@ class CipherApp {
       ephemeralDuration: this.settings.ephemeralDuration
     };
 
-    const targetPeers = Array.from(new Set([
-      ...Array.from(this.webrtc.peerProfiles.keys()),
-      ...Array.from(this.webrtc.connections.keys())
-    ]));
+    let targetPeers = [];
+    if (this.currentRoom.activeRecipientId) {
+      const activeId = this.currentRoom.activeRecipientId;
+      const canonical = activeId.includes('_') ? activeId.split('_').slice(0, 2).join('_') : activeId;
+      
+      const allActive = Array.from(new Set([
+        ...Array.from(this.webrtc.peerProfiles.keys()),
+        ...Array.from(this.webrtc.connections.keys())
+      ]));
+
+      // Check for exact or prefix match (multi-tab/reconnect instance)
+      const matching = allActive.filter(p => p === activeId || p.startsWith(canonical) || canonical.startsWith(p));
+      if (matching.length > 0) {
+        targetPeers = matching;
+      } else {
+        targetPeers = [activeId];
+      }
+    } else {
+      targetPeers = Array.from(new Set([
+        ...Array.from(this.webrtc.peerProfiles.keys()),
+        ...Array.from(this.webrtc.connections.keys())
+      ]));
+    }
 
     let deliveredCount = 0;
 
@@ -2133,7 +2171,9 @@ class CipherApp {
         lastMessage: text,
         role: 'receiver'
       });
-      const key = this.currentRoom.sharedSessionKeys.get(peerId) || this.currentRoom.derivedKey;
+      const key = this.currentRoom.sharedSessionKeys.get(peerId) || 
+                  (this.currentRoom.activeRecipientId ? this.currentRoom.sharedSessionKeys.get(this.currentRoom.activeRecipientId) : null) || 
+                  this.currentRoom.derivedKey;
       const { ciphertext, iv } = await this.crypto.encrypt(JSON.stringify(payload), key);
 
       const sent = this.webrtc.sendTo(peerId, {
@@ -2153,10 +2193,11 @@ class CipherApp {
       });
     }
 
-    if (targetPeers.length === 0) {
+    if (deliveredCount === 0) {
       if (this.currentRoom.activeRecipientId) {
         this.queueMessage(this.currentRoom.activeRecipientId, payload);
-        this.showToast(`⏳ Message queued. Connecting to ${this.currentRoom.activeRecipientId}...`);
+        this.showToast(`⏳ Message queued. Connecting to ${this.currentRoom.activeRecipientId.slice(0, 14)}...`);
+        this.handleDirectChatWithPeer(this.currentRoom.activeRecipientId);
       } else {
         this.showToast(`ℹ️ No peers connected yet. Enter a Peer ID in the sidebar or share your Public Chat Link!`);
       }
