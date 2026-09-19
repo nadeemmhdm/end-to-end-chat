@@ -47,6 +47,7 @@ class CipherApp {
     this.savedMessages = [];
     this.recentPeers = new Set();
     this.STORAGE_CONTACTS_KEY = 'cc_contacts_vault_v1';
+    this.STORAGE_LAST_ACTIVE_CHAT = 'cc_last_active_chat_';
     this.contacts = new Map(); // userId -> contact model object
 
     this.settings = {
@@ -232,6 +233,18 @@ class CipherApp {
           }
         }
 
+        if (!chatTargetId && account.userId) {
+          const savedActive = localStorage.getItem(this.STORAGE_LAST_ACTIVE_CHAT + account.userId);
+          if (savedActive && savedActive !== account.userId) {
+            chatTargetId = savedActive;
+          }
+        }
+
+        if (chatTargetId) {
+          this.pendingChatTargetId = chatTargetId;
+          this.currentRoom.activeRecipientId = chatTargetId;
+        }
+
         await this.activateDeviceAccount(account.userId, account.secretKey, account.username);
         this.checkPinLockAndUnlock(chatTargetId);
         return;
@@ -242,6 +255,16 @@ class CipherApp {
 
     // If new device arrived with specific account URL
     if (accountId && accountKey) {
+      if (!chatTargetId && accountId) {
+        const savedActive = localStorage.getItem(this.STORAGE_LAST_ACTIVE_CHAT + accountId);
+        if (savedActive && savedActive !== accountId) {
+          chatTargetId = savedActive;
+        }
+      }
+      if (chatTargetId) {
+        this.pendingChatTargetId = chatTargetId;
+        this.currentRoom.activeRecipientId = chatTargetId;
+      }
       const username = accountUser ? decodeURIComponent(accountUser) : 'Agent_' + accountId.slice(4, 9);
       await this.activateDeviceAccount(accountId, accountKey, username);
       this.showToast('✅ Device bound to your Account URL!');
@@ -291,19 +314,16 @@ class CipherApp {
     }
     this.currentUser.identityPublicKeyBase64 = idPubBase64;
 
-    // Permanently save to device
-    localStorage.setItem(this.STORAGE_DEVICE_ACCOUNT, JSON.stringify({
+    // Save account securely into device vault
+    const accountRecord = {
       userId,
       secretKey,
       username,
       identityPublicKey: idPubBase64,
       identityPrivateKey: idPrivBase64,
-      boundAt: Date.now()
-    }));
-
-    // Generate Ephemeral ECDH Key Pair for PFS
-    this.currentUser.keyPair = await this.crypto.generateECDHKeyPair();
-    this.currentUser.publicKeyBase64 = await this.crypto.exportPublicKey(this.currentUser.keyPair.publicKey);
+      createdAt: Date.now()
+    };
+    localStorage.setItem(this.STORAGE_DEVICE_ACCOUNT, JSON.stringify(accountRecord));
 
     // Derive Master AES-256-GCM Key from Secret Key
     const salt = await this.crypto.computeFingerprint(userId);
@@ -315,15 +335,22 @@ class CipherApp {
     // Update URLs
     this.updateUniqueUrls();
 
+    // Load contacts & recent peers first so profiles exist for header rendering
+    this.loadRecentPeers();
+    this.loadContacts();
+
+    // Restore previous active chat target if any
+    const savedActivePeer = localStorage.getItem(this.STORAGE_LAST_ACTIVE_CHAT + userId);
+    if (savedActivePeer && savedActivePeer !== userId) {
+      this.currentRoom.activeRecipientId = savedActivePeer;
+    }
+
     // Initialize WebRTC
     await this.initializeWebRTCIdentity(userId);
 
     // Load saved encrypted messages
     await this.loadEncryptedHistory();
 
-    // Load contacts & recent peers
-    this.loadRecentPeers();
-    this.loadContacts();
     this.updatePeerListUI();
     this.updateChatHeader();
 
@@ -393,8 +420,15 @@ class CipherApp {
 
   // Check if user enabled a device PIN
   checkPinLockAndUnlock(chatTargetId) {
+    if (!chatTargetId && this.currentUser && this.currentUser.userId) {
+      const saved = localStorage.getItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId);
+      if (saved && saved !== this.currentUser.userId) {
+        chatTargetId = saved;
+      }
+    }
     if (chatTargetId) {
       this.pendingChatTargetId = chatTargetId;
+      this.currentRoom.activeRecipientId = chatTargetId;
     }
     const savedPin = localStorage.getItem(this.STORAGE_DEVICE_PIN);
     if (savedPin && this.devicePinOverlay) {
@@ -474,11 +508,31 @@ class CipherApp {
         this.sendHandshake(targetPeerId);
       };
 
-      // Flush any connection queued before WebRTC finished initializing
-      if (this.pendingChatTargetId) {
-        const target = this.pendingChatTargetId;
+      // Flush or auto-reconnect to peer that was queued or previously active
+      const savedActive = (this.currentUser && this.currentUser.userId) ? localStorage.getItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId) : null;
+      const target = this.pendingChatTargetId || this.currentRoom.activeRecipientId || (savedActive && savedActive !== this.webrtc.myPeerId ? savedActive : null);
+      if (target && target !== this.webrtc.myPeerId) {
         this.pendingChatTargetId = null;
+        this.currentRoom.activeRecipientId = target;
+        console.log('Auto-connecting to active peer on initialize:', target);
         this.handleDirectChatWithPeer(target);
+
+        // Schedule graceful retries in case remote peer was reconnecting too
+        setTimeout(() => {
+          const isConnected = this.webrtc && (this.webrtc.connections.has(target) || this.webrtc.peerProfiles.has(target));
+          if (!isConnected && this.currentRoom.activeRecipientId === target) {
+            console.log('Auto-reconnect retry (1.5s) to:', target);
+            this.handleDirectChatWithPeer(target);
+          }
+        }, 1500);
+
+        setTimeout(() => {
+          const isConnected = this.webrtc && (this.webrtc.connections.has(target) || this.webrtc.peerProfiles.has(target));
+          if (!isConnected && this.currentRoom.activeRecipientId === target) {
+            console.log('Auto-reconnect retry (3.5s) to:', target);
+            this.handleDirectChatWithPeer(target);
+          }
+        }, 3500);
       }
     } catch (err) {
       console.warn('WebRTC Init Notice:', err);
@@ -518,6 +572,9 @@ class CipherApp {
 
     this.showToast(`Connecting to peer ${targetPeerId.slice(0, 14)}...`);
     this.currentRoom.activeRecipientId = targetPeerId;
+    if (this.currentUser && this.currentUser.userId) {
+      localStorage.setItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId, targetPeerId);
+    }
     this.addRecentPeer(targetPeerId);
     this.recordContact({ userId: targetPeerId, role: 'receiver' });
     this.updateChatHeader();
@@ -652,6 +709,9 @@ class CipherApp {
 
       if (this.currentRoom.activeRecipientId === userId) {
         this.currentRoom.activeRecipientId = null;
+        if (this.currentUser && this.currentUser.userId) {
+          localStorage.removeItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId);
+        }
         this.updateChatHeader();
       }
       this.updatePeerListUI();
@@ -662,6 +722,9 @@ class CipherApp {
   setActiveRecipient(peerId) {
     if (!peerId) return;
     this.currentRoom.activeRecipientId = peerId;
+    if (this.currentUser && this.currentUser.userId) {
+      localStorage.setItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId, peerId);
+    }
     this.updateChatHeader();
     this.updatePeerListUI();
 
@@ -672,7 +735,8 @@ class CipherApp {
     if (isOnline) {
       this.showToast(`🟢 Chat: ${displayName} (Online)`);
     } else {
-      this.showToast(`⚪ Selected: ${displayName} (Offline)`);
+      this.showToast(`⚪ Connecting to ${displayName}...`);
+      this.handleDirectChatWithPeer(peerId);
     }
 
     this.closeSidebarDrawer();
@@ -1040,9 +1104,13 @@ class CipherApp {
       }
     });
 
-    this.chatInput.addEventListener('input', () => {
-      this.updateSendButtonState();
-      this.broadcastTyping(this.chatInput.value.trim().length > 0);
+    ['input', 'change', 'keyup', 'paste', 'compositionend'].forEach(evt => {
+      this.chatInput.addEventListener(evt, () => {
+        this.updateSendButtonState();
+        if (evt === 'input') {
+          this.broadcastTyping(this.chatInput.value.trim().length > 0);
+        }
+      });
     });
 
     this.chatInput.addEventListener('keydown', (e) => {
@@ -1256,6 +1324,12 @@ class CipherApp {
       }
       this.addRecentPeer(peerId);
       this.recordContact({ userId: peerId, role: 'peer' });
+      if (!this.currentRoom.activeRecipientId) {
+        this.currentRoom.activeRecipientId = peerId;
+        if (this.currentUser && this.currentUser.userId) {
+          localStorage.setItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId, peerId);
+        }
+      }
       this.updatePeerListUI();
       this.updateChatHeader();
       this.playSound('alert');
@@ -2557,6 +2631,8 @@ class CipherApp {
         e.stopPropagation();
         if (this.chatInput) {
           this.chatInput.value += item.e;
+          this.updateSendButtonState();
+          this.chatInput.dispatchEvent(new Event('input', { bubbles: true }));
           this.chatInput.focus();
         }
         if (this.emojiPreviewText) {
