@@ -176,6 +176,24 @@ class CipherApp {
     this.emojiGridContainer = document.getElementById('emoji-grid-container');
     this.emojiCategoryTabs = document.getElementById('emoji-category-tabs');
     this.emojiPreviewText = document.getElementById('emoji-preview-text');
+
+    // Mobile Drawer & Tools
+    this.chatSidebar = document.getElementById('chat-sidebar');
+    this.btnMobileMenu = document.getElementById('btn-mobile-menu');
+    this.btnCloseSidebar = document.getElementById('btn-close-sidebar');
+    this.sidebarBackdrop = document.getElementById('sidebar-backdrop');
+    this.btnMobileDecoy = document.getElementById('btn-mobile-decoy');
+    this.btnMobileReset = document.getElementById('btn-mobile-reset');
+
+    // Minimalist Modals: Profile & Settings
+    this.modalProfile = document.getElementById('modal-profile');
+    this.modalSettings = document.getElementById('modal-settings');
+    this.btnOpenProfile = document.getElementById('btn-open-profile');
+    this.btnOpenSettings = document.getElementById('btn-open-settings');
+    this.profileAvatarLarge = document.getElementById('profile-avatar-large');
+    this.chatActivePeerAvatar = document.getElementById('chat-active-peer-avatar');
+    this.chatActivePeerName = document.getElementById('chat-active-peer-name');
+    this.chatActivePeerStatusText = document.getElementById('chat-active-peer-status-text');
   }
 
   // ============================================================================
@@ -388,13 +406,18 @@ class CipherApp {
     const activeDisplayId = this.webrtc.myPeerId || this.currentUser.userId;
     if (this.userBadgeId) this.userBadgeId.textContent = activeDisplayId;
     if (this.userBadgeName) this.userBadgeName.textContent = this.currentUser.username;
-    if (this.userAvatarBadge) this.userAvatarBadge.textContent = this.currentUser.username.charAt(0).toUpperCase();
+    const initial = (this.currentUser.username || 'A').charAt(0).toUpperCase();
+    if (this.userAvatarBadge) this.userAvatarBadge.textContent = initial;
+    if (this.profileAvatarLarge) this.profileAvatarLarge.textContent = initial;
   }
 
   updateVaultModalFields() {
     if (this.vaultUsername) this.vaultUsername.value = this.currentUser.username;
     if (this.vaultDeviceId) this.vaultDeviceId.value = this.currentUser.userId;
     if (this.vaultSecretKey) this.vaultSecretKey.value = this.currentUser.secretKey;
+    if (this.profileAvatarLarge) {
+      this.profileAvatarLarge.textContent = (this.currentUser.username || 'A').charAt(0).toUpperCase();
+    }
     
     const savedPin = localStorage.getItem(this.STORAGE_DEVICE_PIN);
     if (this.togglePinLock) {
@@ -585,15 +608,26 @@ class CipherApp {
 
   // Interactive Event Listeners
   initEventListeners() {
-    // Open Device Vault Modal from Profile Badge
-    if (this.userPillBadge) {
+    // Open Profile Modal from Profile Pill Button
+    if (this.btnOpenProfile) {
+      this.btnOpenProfile.addEventListener('click', () => {
+        this.openProfileModal();
+      });
+    } else if (this.userPillBadge) {
       this.userPillBadge.style.cursor = 'pointer';
       this.userPillBadge.addEventListener('click', () => {
-        this.openDeviceVaultModal();
+        this.openProfileModal();
       });
     }
 
-    // Save Vault Username
+    // Open Settings Modal from Gear Button
+    if (this.btnOpenSettings) {
+      this.btnOpenSettings.addEventListener('click', () => {
+        this.openSettingsModal();
+      });
+    }
+
+    // Save Vault / Profile Username
     const onSaveUsernameClick = () => {
       const newName = this.vaultUsername ? this.vaultUsername.value.trim() : '';
       if (newName) {
@@ -613,8 +647,8 @@ class CipherApp {
       });
     }
 
-    // Auto-save username when closing vault modal if modified
-    document.querySelectorAll('#modal-device-vault .btn-close-modal').forEach(btn => {
+    // Auto-save username when closing profile/vault modal if modified
+    document.querySelectorAll('#modal-profile .btn-close-modal, #modal-device-vault .btn-close-modal').forEach(btn => {
       btn.addEventListener('click', () => {
         if (this.vaultUsername && this.vaultUsername.value.trim() && this.vaultUsername.value.trim() !== this.currentUser.username) {
           this.saveUsername(this.vaultUsername.value.trim());
@@ -717,6 +751,10 @@ class CipherApp {
         if (target) {
           this.handleDirectChatWithPeer(target);
           this.inputPeerConnect.value = '';
+          if (window.innerWidth <= 900 && this.chatSidebar) {
+            this.chatSidebar.classList.remove('open');
+            if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
+          }
         }
       });
       this.inputPeerConnect.addEventListener('keydown', (e) => {
@@ -845,6 +883,13 @@ class CipherApp {
     this.btnOpenSafetyModal.addEventListener('click', () => this.openSafetyModal());
     this.btnVerifySafetyOk.addEventListener('click', () => this.confirmPeerSafetyVerification());
     this.modalCloseButtons.forEach(b => b.addEventListener('click', () => this.closeAllModals()));
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal && modal.id !== 'device-pin-overlay') {
+          this.closeAllModals();
+        }
+      });
+    });
 
     // Share Room Invite
     this.btnShareInvite.addEventListener('click', () => {
@@ -852,6 +897,48 @@ class CipherApp {
         this.showToast('💬 Public Chat Link copied! Share with friends.');
       });
     });
+
+    // Mobile Drawer & Backdrop Controls
+    if (this.btnMobileMenu && this.chatSidebar) {
+      this.btnMobileMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.chatSidebar.classList.toggle('open');
+        if (this.sidebarBackdrop) {
+          this.sidebarBackdrop.classList.toggle('active', this.chatSidebar.classList.contains('open'));
+        }
+      });
+    }
+
+    if (this.btnCloseSidebar && this.chatSidebar) {
+      this.btnCloseSidebar.addEventListener('click', () => {
+        this.chatSidebar.classList.remove('open');
+        if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
+      });
+    }
+
+    if (this.sidebarBackdrop && this.chatSidebar) {
+      this.sidebarBackdrop.addEventListener('click', () => {
+        this.chatSidebar.classList.remove('open');
+        this.sidebarBackdrop.classList.remove('active');
+      });
+    }
+
+    // Mobile Tools Handlers
+    if (this.btnMobileDecoy) {
+      this.btnMobileDecoy.addEventListener('click', () => {
+        if (this.chatSidebar) this.chatSidebar.classList.remove('open');
+        if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
+        this.toggleDecoyMode();
+      });
+    }
+
+    if (this.btnMobileReset) {
+      this.btnMobileReset.addEventListener('click', () => {
+        if (confirm('Are you sure you want to wipe this device account and clear stored messages? Make sure you backed up your keys!')) {
+          this.wipeLocalData();
+        }
+      });
+    }
 
     // Anti-Shoulder-Surfing Privacy Blur
     window.addEventListener('blur', () => {
@@ -868,9 +955,22 @@ class CipherApp {
   }
 
   openDeviceVaultModal() {
+    this.openProfileModal();
+  }
+
+  openProfileModal() {
     this.updateVaultModalFields();
-    if (this.modalDeviceVault) {
-      this.modalDeviceVault.classList.add('active');
+    this.updateUniqueUrls();
+    const modal = this.modalProfile || document.getElementById('modal-profile') || this.modalDeviceVault || document.getElementById('modal-device-vault');
+    if (modal) {
+      modal.classList.add('active');
+    }
+  }
+
+  openSettingsModal() {
+    const modal = this.modalSettings || document.getElementById('modal-settings');
+    if (modal) {
+      modal.classList.add('active');
     }
   }
 
@@ -2844,11 +2944,8 @@ class CipherApp {
     const barsHtml = barHeights.map(h => `<span style="height:${h}%;"></span>`).join('');
 
     card.innerHTML = `
-      <div class="voice-note-header">
-        <div style="display:flex; align-items:center; gap:0.35rem;">
-          <i class='bx bx-microphone' style="color:var(--accent-primary); font-size:1.05rem;"></i>
-          <span>Encrypted Voice Note</span>
-        </div>
+      <div class="voice-note-header" style="justify-content:space-between; margin-bottom:0.25rem;">
+        <i class='bx bx-microphone' style="color:var(--accent-primary); font-size:1.1rem;"></i>
         <span class="voice-duration-tag">${duration}s</span>
       </div>
 
@@ -3092,10 +3189,21 @@ class CipherApp {
           </div>
           <div class="peer-fingerprint">ID: ${peerId.slice(0, 10)}...</div>
         </div>
-        <button class="btn btn-icon" onclick="window.cipherApp.openSafetyModal('${peerId}')" title="Verify Safety Numbers">
+        <button class="btn btn-icon" onclick="event.stopPropagation(); window.cipherApp.openSafetyModal('${peerId}')" title="Verify Safety Numbers">
           <i class='bx bx-fingerprint'></i>
         </button>
       `;
+
+      li.style.cursor = 'pointer';
+      li.addEventListener('click', () => {
+        this.currentRoom.activeRecipientId = peerId;
+        this.showToast(`Active chat with: ${profile.username}`);
+        if (window.innerWidth <= 900 && this.chatSidebar) {
+          this.chatSidebar.classList.remove('open');
+          if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove('active');
+        }
+      });
+
       this.peerListContainer.appendChild(li);
     });
   }
