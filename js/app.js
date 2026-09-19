@@ -12,6 +12,7 @@ class CipherApp {
     this.webrtc = new WebRTCManager();
 
     // Permanent Device Storage Keys
+    window.cipherApp = this;
     this.STORAGE_DEVICE_ACCOUNT = 'ciphercore_device_account';
     this.STORAGE_DEVICE_PIN = 'ciphercore_device_pin';
     this.STORAGE_PIN_LOCKOUT = 'ciphercore_pin_lockout';
@@ -67,6 +68,7 @@ class CipherApp {
     this.initAudioMimeType();
     this.initEventListeners();
     this.initSoundEngine();
+    this.initAntiSnoopProtection();
 
     // Enforce One Device - One Account Lifecycle
     this.initOneDeviceAccountFlow();
@@ -112,6 +114,8 @@ class CipherApp {
     this.messagesContainer = document.getElementById('messages-container');
     this.chatInput = document.getElementById('chat-message-input');
     this.btnSendMessage = document.getElementById('btn-send-message');
+    this.messagesContainer = document.getElementById('messages-container');
+    this.chatMessagesContainer = this.messagesContainer;
     this.btnAttachFile = document.getElementById('btn-attach-file');
     this.fileInputElement = document.getElementById('file-input');
     this.btnRecordVoice = document.getElementById('btn-record-voice');
@@ -201,6 +205,7 @@ class CipherApp {
     this.chatHeaderPeerCard = document.getElementById('chat-header-peer-card');
     this.totalContactsCount = document.getElementById('total-contacts-count');
     this.onlinePeerBadge = document.getElementById('online-peer-badge');
+    this.screenPrivacyShield = document.getElementById('screen-privacy-shield');
   }
 
   // ============================================================================
@@ -618,6 +623,12 @@ class CipherApp {
     } catch (e) {}
   }
 
+  saveRecentPeers() {
+    try {
+      localStorage.setItem(this.STORAGE_RECENT_PEERS, JSON.stringify(Array.from(this.recentPeers)));
+    } catch (e) {}
+  }
+
   // ============================================================================
   // PERSISTENT CONTACTS & ALL USERS STORE (LOCAL STORAGE)
   // ============================================================================
@@ -660,30 +671,63 @@ class CipherApp {
     return this.contacts.get(userId) || null;
   }
 
-  recordContact({ userId, username, lastMessage, role, isVerified }) {
+  recordContact({ userId, username, lastMessage, role, isVerified, senderId, identityPublicKey }) {
     if (!userId) return;
     userId = userId.trim();
     // Do not record self as contact
     if (this.currentUser && userId === this.currentUser.userId) return;
     if (this.webrtc && this.webrtc.myPeerId && userId === this.webrtc.myPeerId) return;
 
+    // Canonical Account ID (strips transient PeerJS instance suffixes like usr_abc123_4f8e)
+    const canonicalId = senderId || (userId.includes('_') ? userId.split('_').slice(0, 2).join('_') : userId);
     const now = Date.now();
+
+    // Check if an existing contact matches by exact userId, or by senderId, or by canonicalId, or identityPublicKey
     let contact = this.contacts.get(userId);
+    let existingKey = userId;
+
+    if (!contact) {
+      for (const [key, c] of this.contacts.entries()) {
+        const cCanonical = c.senderId || c.canonicalId || (c.userId.includes('_') ? c.userId.split('_').slice(0, 2).join('_') : c.userId);
+        const matchesKey = key === canonicalId || key.startsWith(canonicalId) || canonicalId.startsWith(key);
+        const matchesCanonical = cCanonical && (cCanonical === canonicalId);
+        const matchesIdentity = identityPublicKey && c.identityPublicKey && (c.identityPublicKey === identityPublicKey);
+        const matchesSender = senderId && (c.senderId === senderId || c.userId === senderId);
+
+        if (matchesKey || matchesCanonical || matchesIdentity || matchesSender) {
+          contact = c;
+          existingKey = key;
+          break;
+        }
+      }
+    }
 
     if (!contact) {
       contact = {
         userId: userId,
-        username: (username && !username.startsWith('Peer_')) ? username : ('Agent_' + userId.slice(4, 9)),
+        canonicalId: canonicalId,
+        senderId: senderId || canonicalId,
+        username: (username && !username.startsWith('Peer_')) ? username : ('Agent_' + canonicalId.slice(4, 9)),
         lastSeen: now,
         lastMessage: lastMessage || '',
         lastMessageTime: lastMessage ? now : 0,
         lastMessageOutgoing: role === 'receiver',
         role: role || 'peer',
         isVerified: !!isVerified,
+        identityPublicKey: identityPublicKey || null,
         addedAt: now
       };
       this.contacts.set(userId, contact);
     } else {
+      // If the peer is now using a new active instance peerId, migrate contact key
+      if (existingKey !== userId) {
+        this.contacts.delete(existingKey);
+        contact.userId = userId;
+      }
+      if (senderId) contact.senderId = senderId;
+      if (canonicalId) contact.canonicalId = canonicalId;
+      if (identityPublicKey) contact.identityPublicKey = identityPublicKey;
+
       if (username && !username.startsWith('Peer_') && username !== contact.userId) {
         contact.username = username;
       }
@@ -695,28 +739,81 @@ class CipherApp {
       }
       if (role) contact.role = role;
       if (isVerified !== undefined) contact.isVerified = isVerified;
+      this.contacts.set(userId, contact);
     }
 
     this.saveContactsToStorage();
   }
 
-  removeContact(userId) {
+  async removeContact(userId) {
     if (!userId) return;
-    if (this.contacts.has(userId)) {
-      const contact = this.contacts.get(userId);
-      this.contacts.delete(userId);
-      this.saveContactsToStorage();
+    userId = userId.trim();
+    const canonicalId = (userId.includes('_') ? userId.split('_').slice(0, 2).join('_') : userId);
+    const contact = this.contacts.get(userId) || Array.from(this.contacts.values()).find(c => c.userId === userId || c.canonicalId === canonicalId);
+    const displayName = (contact && contact.username) || userId.slice(0, 8);
 
-      if (this.currentRoom.activeRecipientId === userId) {
-        this.currentRoom.activeRecipientId = null;
-        if (this.currentUser && this.currentUser.userId) {
-          localStorage.removeItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId);
-        }
-        this.updateChatHeader();
-      }
-      this.updatePeerListUI();
-      this.showToast(`Contact ${contact.username || userId.slice(0, 8)} removed`);
+    // 1. Delete contact from contacts map
+    this.contacts.delete(userId);
+    if (contact && contact.userId !== userId) {
+      this.contacts.delete(contact.userId);
     }
+    // Purge any alias contacts matching canonical ID
+    Array.from(this.contacts.keys()).forEach(k => {
+      if (k === userId || k.startsWith(canonicalId) || canonicalId.startsWith(k)) {
+        this.contacts.delete(k);
+      }
+    });
+    this.saveContactsToStorage();
+
+    // 2. Auto-delete chat history for this user (both sent and received)
+    const initialCount = this.savedMessages.length;
+    this.savedMessages = this.savedMessages.filter(m => {
+      const mPeer = m.peerId || m.recipientId || m.senderId || '';
+      const isMatch = mPeer === userId || 
+                      mPeer.startsWith(canonicalId) || 
+                      canonicalId.startsWith(mPeer) ||
+                      (contact && contact.username && m.author === contact.username && !m.isOutgoing);
+      return !isMatch;
+    });
+    await this.saveEncryptedHistory();
+
+    // 3. Remove from recent peers
+    this.recentPeers.delete(userId);
+    this.recentPeers.delete(canonicalId);
+    this.saveRecentPeers();
+
+    // 4. Disconnect active WebRTC connection if open
+    if (this.webrtc) {
+      try {
+        if (this.webrtc.connections.has(userId)) {
+          const conn = this.webrtc.connections.get(userId);
+          if (conn) conn.close();
+          this.webrtc.connections.delete(userId);
+        }
+        this.webrtc.peerProfiles.delete(userId);
+      } catch (e) {}
+    }
+
+    // 5. If currently viewing this contact, reset chat view and header
+    const isActive = this.currentRoom.activeRecipientId === userId || 
+                     (this.currentRoom.activeRecipientId && this.currentRoom.activeRecipientId.startsWith(canonicalId));
+    if (isActive) {
+      this.currentRoom.activeRecipientId = null;
+      if (this.currentUser && this.currentUser.userId) {
+        localStorage.removeItem(this.STORAGE_LAST_ACTIVE_CHAT + this.currentUser.userId);
+      }
+      const container = this.messagesContainer || this.chatMessagesContainer;
+      if (container) {
+        container.innerHTML = '';
+      }
+      this.updateChatHeader();
+    } else {
+      // Re-render remaining saved messages
+      this.renderAllSavedMessages();
+    }
+
+    this.updatePeerListUI();
+    this.showToast(`🗑️ Contact "${displayName}" and all associated chat history deleted.`);
   }
 
   setActiveRecipient(peerId) {
@@ -1293,6 +1390,151 @@ class CipherApp {
     }
   }
 
+  // ============================================================================
+  // ANTI-SNOOP, SCREEN SHARING & DEVTOOLS INSPECT DEFENSE SYSTEM
+  // ============================================================================
+  initAntiSnoopProtection() {
+    // 1. Block Screen Sharing API (prevents browser extension or script screen capture)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        navigator.mediaDevices.getDisplayMedia = async function() {
+          throw new DOMException('Screen sharing is strictly blocked for cryptographic security and privacy in CipherCore.', 'NotAllowedError');
+        };
+      }
+    } catch (e) {
+      console.warn('Could not override getDisplayMedia:', e);
+    }
+
+    // 2. Prevent right-click context menu (blocks inspect element via mouse)
+    window.addEventListener('contextmenu', (e) => {
+      const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      if (!isInput) {
+        e.preventDefault();
+        this.showToast('🛡️ Developer inspect & context menu disabled for privacy protection.');
+      }
+    });
+
+    // 3. Prevent text copy & cut on messages and sensitive chat views
+    document.addEventListener('copy', (e) => {
+      const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      if (!isInput) {
+        e.preventDefault();
+        if (e.clipboardData) e.clipboardData.clearData();
+        this.showToast('🔒 Text copying is disabled to safeguard confidential chat messages.');
+      }
+    });
+
+    document.addEventListener('cut', (e) => {
+      const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      if (!isInput) {
+        e.preventDefault();
+        if (e.clipboardData) e.clipboardData.clearData();
+        this.showToast('🔒 Text cutting is disabled for privacy protection.');
+      }
+    });
+
+    document.addEventListener('dragstart', (e) => {
+      const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+      if (!isInput) {
+        e.preventDefault();
+      }
+    });
+
+    // 4. Block DevTools, View Source, and Screenshot Key Combinations
+    window.addEventListener('keydown', (e) => {
+      const key = e.key;
+      const code = e.code;
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+      // F12 (DevTools)
+      if (key === 'F12' || code === 'F12') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPrivacyShield(2200, 'Developer Tools blocked for security');
+        return false;
+      }
+
+      // Ctrl+Shift+I / Cmd+Opt+I (Inspect)
+      // Ctrl+Shift+J / Cmd+Opt+J (Console)
+      // Ctrl+Shift+C / Cmd+Opt+C (Inspect element)
+      if (isCtrlOrMeta && e.shiftKey && ['I', 'i', 'J', 'j', 'C', 'c'].includes(key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPrivacyShield(2200, 'Developer Inspect shortcut blocked');
+        return false;
+      }
+
+      // Ctrl+U / Cmd+Opt+U (View Source)
+      if (isCtrlOrMeta && (key === 'u' || key === 'U')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPrivacyShield(2200, 'Source code viewing blocked');
+        return false;
+      }
+
+      // Ctrl+S / Cmd+S (Save Page)
+      if (isCtrlOrMeta && (key === 's' || key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPrivacyShield(1600, 'Page saving blocked');
+        return false;
+      }
+
+      // PrintScreen / Screenshot combos (Win+Shift+S, Cmd+Shift+3, Cmd+Shift+4)
+      if (key === 'PrintScreen' || code === 'PrintScreen' || (e.shiftKey && isCtrlOrMeta && (key === 'S' || key === 's' || key === '3' || key === '4'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPrivacyShield(3000, 'Screenshot capture blocked for privacy');
+        return false;
+      }
+    }, true);
+
+    // Also catch PrintScreen on keyup
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+        e.preventDefault();
+        this.triggerPrivacyShield(3000, 'Screenshot capture blocked for privacy');
+      }
+    }, true);
+
+    // 5. Window Blur & Visibility Shield (Prevents screencasting / background snooping when switching apps)
+    window.addEventListener('blur', () => {
+      if (this.screenPrivacyShield && !document.hasFocus()) {
+        this.screenPrivacyShield.classList.add('active');
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (this.screenPrivacyShield) {
+        setTimeout(() => {
+          this.screenPrivacyShield.classList.remove('active');
+        }, 220);
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.screenPrivacyShield) {
+        this.screenPrivacyShield.classList.add('active');
+      } else if (!document.hidden && this.screenPrivacyShield) {
+        setTimeout(() => {
+          this.screenPrivacyShield.classList.remove('active');
+        }, 220);
+      }
+    });
+  }
+
+  triggerPrivacyShield(durationMs = 2500, reason = '') {
+    if (!this.screenPrivacyShield) return;
+    this.screenPrivacyShield.classList.add('active');
+    if (reason) this.showToast(`🛡️ ${reason}`);
+    clearTimeout(this._shieldTimer);
+    this._shieldTimer = setTimeout(() => {
+      if (document.hasFocus() && !document.hidden) {
+        this.screenPrivacyShield.classList.remove('active');
+      }
+    }, durationMs);
+  }
+
   openDeviceVaultModal() {
     this.openProfileModal();
   }
@@ -1734,6 +1976,8 @@ class CipherApp {
         this.addRecentPeer(peerId);
         this.recordContact({
           userId: peerId,
+          senderId: packet.sender,
+          identityPublicKey: packet.identityPublicKey,
           username: packet.username,
           isVerified: isVerified,
           role: 'peer'
@@ -1805,6 +2049,9 @@ class CipherApp {
           text: msg.text,
           time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           isOutgoing: false,
+          peerId: msg.senderId || packet.sender || peerId,
+          senderId: msg.senderId || packet.sender || peerId,
+          recipientId: this.currentUser.userId,
           ephemeralSeconds: msg.ephemeralDuration || 0
         };
 
@@ -1812,6 +2059,7 @@ class CipherApp {
 
         this.recordContact({
           userId: peerId,
+          senderId: msg.senderId || packet.sender,
           username: msg.username || 'Peer',
           lastMessage: msg.text,
           role: 'sender'
@@ -1834,11 +2082,15 @@ class CipherApp {
             text: msg.text,
             time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             isOutgoing: false,
+            peerId: msg.senderId || packet.sender || peerId,
+            senderId: msg.senderId || packet.sender || peerId,
+            recipientId: this.currentUser.userId,
             ephemeralSeconds: msg.ephemeralDuration || 0
           };
           this.renderMessageBubble(msgObj);
           this.recordContact({
             userId: peerId,
+            senderId: msg.senderId || packet.sender,
             username: msg.username || 'Peer',
             lastMessage: msg.text,
             role: 'sender'
@@ -1915,6 +2167,9 @@ class CipherApp {
       text: text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isOutgoing: true,
+      peerId: this.currentRoom.activeRecipientId || 'peer',
+      senderId: this.currentUser.userId,
+      recipientId: this.currentRoom.activeRecipientId || 'peer',
       ephemeralSeconds: this.settings.ephemeralDuration,
       delivered: deliveredCount > 0
     };
@@ -2060,6 +2315,36 @@ class CipherApp {
     );
   }
 
+  renderAllSavedMessages(filterPeerId = null) {
+    const container = this.messagesContainer || this.chatMessagesContainer;
+    if (!container) return;
+    container.innerHTML = '';
+    const items = this.savedMessages;
+    items.forEach(item => {
+      if (item.type === 'file' || item.type === 'image') {
+        if (item.base64Data && !item.dataUrl) {
+          try {
+            const buf = this.crypto.base64ToBuffer(item.base64Data);
+            const blob = new Blob([buf], { type: item.fileType || 'application/octet-stream' });
+            item.dataUrl = URL.createObjectURL(blob);
+          } catch (e) {}
+        }
+        this.renderFileCard(item);
+      } else if (item.type === 'voice') {
+        if (item.base64Audio && !item.dataUrl) {
+          try {
+            const buf = this.crypto.base64ToBuffer(item.base64Audio);
+            const blob = new Blob([buf], { type: item.mimeType || 'audio/webm' });
+            item.dataUrl = URL.createObjectURL(blob);
+          } catch (e) {}
+        }
+        this.renderVoiceNoteCard(item);
+      } else {
+        this.renderMessageBubble(item);
+      }
+    });
+  }
+
   async loadEncryptedHistory() {
     if (!this.currentUser.secretKey) return;
     const history = await this.crypto.loadSecureLocal(
@@ -2069,29 +2354,7 @@ class CipherApp {
 
     if (Array.isArray(history) && history.length > 0) {
       this.savedMessages = history;
-      history.forEach(item => {
-        if (item.type === 'file' || item.type === 'image') {
-          if (item.base64Data) {
-            try {
-              const buf = this.crypto.base64ToBuffer(item.base64Data);
-              const blob = new Blob([buf], { type: item.fileType || 'application/octet-stream' });
-              item.dataUrl = URL.createObjectURL(blob);
-            } catch (e) {}
-          }
-          this.renderFileCard(item);
-        } else if (item.type === 'voice') {
-          if (item.base64Audio) {
-            try {
-              const buf = this.crypto.base64ToBuffer(item.base64Audio);
-              const blob = new Blob([buf], { type: item.mimeType || 'audio/webm' });
-              item.dataUrl = URL.createObjectURL(blob);
-            } catch (e) {}
-          }
-          this.renderVoiceNoteCard(item);
-        } else {
-          this.renderMessageBubble(item);
-        }
-      });
+      this.renderAllSavedMessages();
       this.showToast(`Restored ${history.length} encrypted items from local storage.`);
     }
   }
@@ -2779,6 +3042,9 @@ class CipherApp {
           isImage: isImg,
           author: this.currentUser.username,
           isOutgoing: true,
+          peerId: this.currentRoom.activeRecipientId || 'peer',
+          senderId: this.currentUser.userId,
+          recipientId: this.currentRoom.activeRecipientId || 'peer',
           dataUrl: dataUrl,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
@@ -2845,6 +3111,9 @@ class CipherApp {
           fileName: metadata.fileName || 'voice-note.webm',
           author: metadata.author || 'Peer',
           isOutgoing: false,
+          peerId: metadata.senderId || peerId,
+          senderId: metadata.senderId || peerId,
+          recipientId: this.currentUser.userId,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
@@ -2854,6 +3123,7 @@ class CipherApp {
 
         this.recordContact({
           userId: metadata.senderId || peerId,
+          senderId: metadata.senderId,
           username: metadata.author || 'Peer',
           lastMessage: '🎙️ Voice Note',
           role: 'sender'
@@ -2879,6 +3149,9 @@ class CipherApp {
         isImage: isImg,
         author: metadata.author || 'Peer',
         isOutgoing: false,
+        peerId: metadata.senderId || peerId,
+        senderId: metadata.senderId || peerId,
+        recipientId: this.currentUser.userId,
         dataUrl: dataUrl,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
@@ -3324,6 +3597,9 @@ class CipherApp {
         fileName: metadata.fileName,
         author: this.currentUser.username,
         isOutgoing: true,
+        peerId: this.currentRoom.activeRecipientId || 'peer',
+        senderId: this.currentUser.userId,
+        recipientId: this.currentRoom.activeRecipientId || 'peer',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -3597,12 +3873,34 @@ class CipherApp {
           userId: peerId,
           username: profile.username,
           isVerified: profile.isVerified,
+          identityPublicKey: profile.identityPublicKey,
+          senderId: profile.senderId,
           role: 'peer'
         });
       });
     }
 
-    const contacts = this.getContacts();
+    const rawContacts = this.getContacts();
+
+    // Deduplicate contacts by canonical identity so same user never appears twice
+    const deduplicatedMap = new Map();
+    rawContacts.forEach(c => {
+      const canon = c.senderId || c.canonicalId || (c.userId.includes('_') ? c.userId.split('_').slice(0, 2).join('_') : c.userId);
+      const existing = deduplicatedMap.get(canon);
+      if (!existing) {
+        deduplicatedMap.set(canon, c);
+      } else {
+        const cOnline = this.webrtc && (this.webrtc.connections.has(c.userId) || this.webrtc.peerProfiles.has(c.userId));
+        const existOnline = this.webrtc && (this.webrtc.connections.has(existing.userId) || this.webrtc.peerProfiles.has(existing.userId));
+        if (cOnline && !existOnline) {
+          deduplicatedMap.set(canon, c);
+        } else if (!existOnline && (c.lastSeen || 0) > (existing.lastSeen || 0)) {
+          deduplicatedMap.set(canon, c);
+        }
+      }
+    });
+    const contacts = Array.from(deduplicatedMap.values());
+
     const connectedCount = this.webrtc ? this.webrtc.getConnectedPeerCount() : 0;
 
     if (this.connectedCount) {
@@ -3631,16 +3929,32 @@ class CipherApp {
 
     // Sort contacts: Online users first, then by lastSeen descending
     const sorted = [...contacts].sort((a, b) => {
-      const aOnline = this.webrtc && (this.webrtc.connections.has(a.userId) || this.webrtc.peerProfiles.has(a.userId));
-      const bOnline = this.webrtc && (this.webrtc.connections.has(b.userId) || this.webrtc.peerProfiles.has(b.userId));
+      const aOnline = this.webrtc && (
+        this.webrtc.connections.has(a.userId) || 
+        this.webrtc.peerProfiles.has(a.userId) ||
+        (a.senderId && (this.webrtc.connections.has(a.senderId) || this.webrtc.peerProfiles.has(a.senderId))) ||
+        (a.canonicalId && Array.from(this.webrtc.connections.keys()).some(k => k.startsWith(a.canonicalId)))
+      );
+      const bOnline = this.webrtc && (
+        this.webrtc.connections.has(b.userId) || 
+        this.webrtc.peerProfiles.has(b.userId) ||
+        (b.senderId && (this.webrtc.connections.has(b.senderId) || this.webrtc.peerProfiles.has(b.senderId))) ||
+        (b.canonicalId && Array.from(this.webrtc.connections.keys()).some(k => k.startsWith(b.canonicalId)))
+      );
       if (aOnline && !bOnline) return -1;
       if (!aOnline && bOnline) return 1;
       return (b.lastSeen || 0) - (a.lastSeen || 0);
     });
 
     sorted.forEach(contact => {
-      const isOnline = this.webrtc && (this.webrtc.connections.has(contact.userId) || this.webrtc.peerProfiles.has(contact.userId));
-      const isActive = this.currentRoom.activeRecipientId === contact.userId;
+      const isOnline = this.webrtc && (
+        this.webrtc.connections.has(contact.userId) || 
+        this.webrtc.peerProfiles.has(contact.userId) ||
+        (contact.senderId && (this.webrtc.connections.has(contact.senderId) || this.webrtc.peerProfiles.has(contact.senderId))) ||
+        (contact.canonicalId && Array.from(this.webrtc.connections.keys()).some(k => k.startsWith(contact.canonicalId)))
+      );
+      const isActive = this.currentRoom.activeRecipientId === contact.userId || 
+                       (contact.canonicalId && this.currentRoom.activeRecipientId && this.currentRoom.activeRecipientId.startsWith(contact.canonicalId));
       const initial = (contact.username || contact.userId).charAt(0).toUpperCase();
 
       const li = document.createElement('li');

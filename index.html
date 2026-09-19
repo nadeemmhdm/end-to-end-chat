@@ -42,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=autoreconnect_v1">
+  <link rel="stylesheet" href="css/style.css?v=antisnoop_v1">
   <style>
     @media (max-width: 768px) {
       .header-desktop-only {
@@ -523,6 +523,18 @@
   </main>
 
   <!-- ====================================================================
+       PRIVACY SCREEN SHIELD OVERLAY
+       ==================================================================== -->
+  <div class="screen-privacy-shield" id="screen-privacy-shield" aria-hidden="true">
+    <div class="shield-content">
+      <i class='bx bxs-shield-quarter shield-icon'></i>
+      <span class="shield-badge"><i class='bx bx-lock-alt'></i> Privacy Guard Active</span>
+      <h3>Screen Shield Protected</h3>
+      <p>Screen capture, recording, and snoop viewing are blocked to safeguard end-to-end encrypted conversations.</p>
+    </div>
+  </div>
+
+  <!-- ====================================================================
        MODAL: IMAGE LIGHTBOX
        ==================================================================== -->
   <div class="image-lightbox-backdrop" id="image-lightbox">
@@ -924,10 +936,9 @@
   <!-- Self-Hosted PeerJS Library with Subresource Integrity (SRI) -->
   <script src="js/vendor/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
 
-  <!-- Application Logic -->
   <script src="js/crypto.js"></script>
   <script src="js/webrtc.js"></script>
-  <script src="js/app.js?v=autoreconnect_v1"></script>
+  <script src="js/app.js?v=antisnoop_v1"></script>
 
   <!-- Theme Switching Script Helper -->
   <script>

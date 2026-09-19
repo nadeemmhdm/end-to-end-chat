@@ -2709,4 +2709,114 @@ body.privacy-blurred main {
   }
 }
 
+/* ====================================================================
+   ANTI-SNOOP, SCREEN SHIELD & PRIVACY PROTECTION
+   ==================================================================== */
+@media print {
+  html, body {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* Disallow text selection & copying across chat messages and sensitive areas */
+.chat-messages-container,
+.message-bubble,
+.message-text,
+.message-file-name,
+.peer-list,
+.peer-last-msg,
+.peer-name,
+.peer-fingerprint {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* Allow text selection inside input boxes */
+input, textarea {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Privacy Screen Shield Overlay (Activates on Screenshot attempt, app switch or blur) */
+.screen-privacy-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(10, 15, 29, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.screen-privacy-shield.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.shield-content {
+  text-align: center;
+  padding: 2.2rem 1.8rem;
+  max-width: 420px;
+  margin: 1rem;
+  background: var(--bg-surface-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl), 0 0 30px rgba(0, 240, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.shield-content .shield-icon {
+  font-size: 3.2rem;
+  color: var(--accent-primary);
+  filter: drop-shadow(0 0 15px var(--accent-primary-glow));
+  animation: pulseShield 2s infinite ease-in-out;
+}
+
+@keyframes pulseShield {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; filter: drop-shadow(0 0 25px var(--accent-primary-glow)); }
+}
+
+.shield-content h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.shield-content p {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.shield-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 
