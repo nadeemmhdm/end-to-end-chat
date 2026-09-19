@@ -1456,6 +1456,36 @@ body.privacy-blurred main {
 
 #btn-send-message {
   flex-shrink: 0 !important;
+  transition: transform var(--transition-fast), background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+#btn-send-message i {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#btn-send-message[data-mode="voice"] {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-primary);
+}
+
+#btn-send-message[data-mode="voice"]:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px var(--accent-primary-glow);
+  transform: scale(1.05);
+}
+
+#btn-send-message[data-mode="send"] {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-inverted);
+}
+
+#btn-send-message[data-mode="send"]:hover {
+  background: var(--accent-primary-hover);
+  box-shadow: 0 0 15px var(--accent-primary-glow);
+  transform: scale(1.05);
 }
 
 .chat-input {

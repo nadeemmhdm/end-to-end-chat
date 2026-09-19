@@ -825,12 +825,26 @@ class CipherApp {
       });
     }
 
-    // Chat messaging: Send button & Enter key
-    this.btnSendMessage.addEventListener('click', () => this.handleSendMessage());
+    // Chat messaging: Dynamic Send / Voice Recorder Action Button & Enter key
+    this.btnSendMessage.addEventListener('click', () => {
+      if (this.chatInput.value.trim().length > 0) {
+        this.handleSendMessage();
+      } else {
+        this.startVoiceRecording();
+      }
+    });
+
+    this.chatInput.addEventListener('input', () => {
+      this.updateSendButtonState();
+      this.broadcastTyping(this.chatInput.value.trim().length > 0);
+    });
+
     this.chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        this.handleSendMessage();
+        if (this.chatInput.value.trim().length > 0) {
+          this.handleSendMessage();
+        }
       }
     });
 
@@ -849,7 +863,9 @@ class CipherApp {
     });
 
     // Voice Notes Controls
-    this.btnRecordVoice.addEventListener('click', () => this.startVoiceRecording());
+    if (this.btnRecordVoice) {
+      this.btnRecordVoice.addEventListener('click', () => this.startVoiceRecording());
+    }
     this.btnCancelRecording.addEventListener('click', () => this.cancelVoiceRecording());
     this.btnStopAndSendRecording.addEventListener('click', () => this.stopAndSendVoiceRecording());
 
@@ -952,6 +968,32 @@ class CipherApp {
 
     // Bind WebRTC Network Handlers
     this.bindWebRTCEvents();
+
+    // Initialize Dynamic Send / Voice action button
+    this.updateSendButtonState();
+  }
+
+  // Dynamic Send Button / Voice Recorder Toggle
+  updateSendButtonState() {
+    if (!this.btnSendMessage || !this.chatInput) return;
+    const hasText = this.chatInput.value.trim().length > 0;
+    const icon = this.btnSendMessage.querySelector('i');
+
+    if (hasText) {
+      this.btnSendMessage.title = 'Send Message';
+      this.btnSendMessage.setAttribute('aria-label', 'Send Message');
+      this.btnSendMessage.dataset.mode = 'send';
+      if (icon && !icon.classList.contains('bxs-send')) {
+        icon.className = 'bx bxs-send';
+      }
+    } else {
+      this.btnSendMessage.title = 'Record Voice Note';
+      this.btnSendMessage.setAttribute('aria-label', 'Record Voice Note');
+      this.btnSendMessage.dataset.mode = 'voice';
+      if (icon && !icon.classList.contains('bx-microphone')) {
+        icon.className = 'bx bx-microphone';
+      }
+    }
   }
 
   openDeviceVaultModal() {
@@ -1539,6 +1581,7 @@ class CipherApp {
     }
 
     this.chatInput.value = '';
+    this.updateSendButtonState();
     this.playSound('send');
   }
 
@@ -2760,6 +2803,7 @@ class CipherApp {
       this.recordingStartTime = Date.now();
       this.recordingBar.style.display = 'flex';
       this.chatInput.style.display = 'none';
+      if (this.btnSendMessage) this.btnSendMessage.style.display = 'none';
 
       this.recordingInterval = setInterval(() => {
         const secs = Math.floor((Date.now() - this.recordingStartTime) / 1000);
@@ -2793,6 +2837,8 @@ class CipherApp {
     clearInterval(this.recordingInterval);
     this.recordingBar.style.display = 'none';
     this.chatInput.style.display = 'block';
+    if (this.btnSendMessage) this.btnSendMessage.style.display = '';
+    this.updateSendButtonState();
     this.showToast('Voice recording cancelled.');
   }
 
@@ -2819,6 +2865,8 @@ class CipherApp {
 
     this.recordingBar.style.display = 'none';
     this.chatInput.style.display = 'block';
+    if (this.btnSendMessage) this.btnSendMessage.style.display = '';
+    this.updateSendButtonState();
 
     const recordingStream = this.activeAudioStream;
     const durationSecs = Math.max(1, Math.round((Date.now() - this.recordingStartTime) / 1000));

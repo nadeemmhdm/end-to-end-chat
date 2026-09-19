@@ -42,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=minimal_v4">
+  <link rel="stylesheet" href="css/style.css?v=minimal_v5">
   <style>
     @media (max-width: 768px) {
       .header-desktop-only {
@@ -464,10 +464,6 @@
                 <i class='bx bx-paperclip'></i>
               </button>
 
-              <button class="btn btn-icon" id="btn-record-voice" title="Record Encrypted Voice Note">
-                <i class='bx bx-microphone'></i>
-              </button>
-
               <!-- Emoji Picker Toggle Button -->
               <button class="btn btn-icon" id="btn-toggle-emoji-picker" title="Open Complete Emoji Picker">
                 <i class='bx bx-smile'></i>
@@ -509,8 +505,9 @@
 
               <input type="text" id="chat-message-input" class="chat-input" placeholder="Type encrypted message..." autocomplete="off">
 
-              <button class="btn btn-primary btn-icon" id="btn-send-message" title="Send Message">
-                <i class='bx bxs-send'></i>
+              <!-- Dynamic Action Button: Voice Recorder (when empty) / Send (when text entered) -->
+              <button class="btn btn-primary btn-icon" id="btn-send-message" title="Record Voice Note" aria-label="Record Voice Note" data-mode="voice">
+                <i class='bx bx-microphone'></i>
               </button>
             </div>
           </div>
@@ -926,7 +923,7 @@
   <!-- Application Logic -->
   <script src="js/crypto.js"></script>
   <script src="js/webrtc.js"></script>
-  <script src="js/app.js?v=minimal_v2"></script>
+  <script src="js/app.js?v=minimal_v5"></script>
 
   <!-- Theme Switching Script Helper -->
   <script>
